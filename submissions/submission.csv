@@ -1,0 +1,6 @@
+timestamp,ticker,position_size
+2024-01-02,AAPL,0.5
+2024-01-02,MSFT,0.3
+2024-01-03,AAPL,0.4
+2024-01-03,MSFT,0.4
+2024-01-03,NVDA,-0.2
