@@ -3,11 +3,11 @@ import os
 
 # --- Configuration: UPDATE THESE VALUES ---
 
-# 1. Get this from the API Gateway console after deploying your API (Step 6 in the guide).
+# 1. Get this from the API Gateway console after deploying your API.
 #    It should look like: https://xxxxxxxxx.execute-api.us-east-1.amazonaws.com/v1
-API_GATEWAY_URL = "YOUR_API_GATEWAY_INVOKE_URL" 
+API_GATEWAY_URL = "https://io89ucc2be.execute-api.eu-central-1.amazonaws.com/v1" 
 
-# 2. This is the API key you generated for a test participant (Step 6).
+# 2. This is the API key you generated for a test participant.
 API_KEY = "ga6AmUXEjh4IslS1RpC3E3mQxF9wtsxg2IRfPCN2"
 
 # 3. Path to the submission file you want to upload.
