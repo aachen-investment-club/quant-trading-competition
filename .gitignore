@@ -1,4 +1,14 @@
 .env
 HOST_GUIDE.md
 /infra
-/data
+/data/*
+
+__pycache__
+*.pyc
+.DS_Store
+.vscode
+.idea
+
+.ipynb_checkpoints
+.ipynb_checkpoints/*.ipynb
+*.log
