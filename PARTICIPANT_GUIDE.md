@@ -104,10 +104,14 @@ The script uploads **everything in `submission/`** and prints the target S3 pref
 
 ### Alternative: submit from inside Docker
 The image also provides a `submit` shortcut which calls the same script:
+### Option A — Shortcut with env file (recommended)
 ```bash
-docker run --rm -it   -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION   -e SUBMISSIONS_BUCKET -e PARTICIPANT_ID   -v "$(pwd):/usr/src/app"   trading-comp-env submit
 
 docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-evaluator submit
+```
+### Option B — Shortcut
+```bash
+docker run --rm -it -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION -e SUBMISSIONS_BUCKET -e PARTICIPANT_ID -v "$(pwd):/usr/src/app" trading-comp-env submit
 ```
 
 ---
@@ -123,6 +127,5 @@ docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-evaluator 
 ---
 
 ## 5) Troubleshooting
-
 
 Good luck! 🚀

@@ -26,14 +26,16 @@ def _rsi(close: pd.Series, window: int = 14) -> pd.Series:
     return rsi.fillna(50.0)
 
 def _atr(df: pd.DataFrame, window: int = 14) -> pd.Series:
-    high, low, close = df["high"].astype(float), df["low"].astype(float), df["close"].astype(float)
+    close = df["close"].astype(float)
+    high = df["high"].astype(float) if "high" in df else close
+    low = df["low"].astype(float) if "low" in df else close
     prev_close = close.shift(1)
     tr = pd.concat([
         (high - low),
         (high - prev_close).abs(),
         (low - prev_close).abs(),
     ], axis=1).max(axis=1)
-    return tr.rolling(window).mean().fillna(method="bfill")
+    return tr.rolling(window).mean().bfill()
 
 
 # ===================================================
@@ -75,8 +77,7 @@ class SmaAtrStrategy(Strategy):
         raw = np.where(atr_norm > self.atr_cap, 0, raw)
 
         sig = pd.Series(raw, index=df.index, name="signal").astype(int)
-        # optional: lag signals one bar to avoid look-ahead (executor often assumes next-bar entry)
-        sig = sig.shift(1).fillna(0).astype(int)
+        # evaluator applies the next-bar execution lag, so emit current-bar intent
         return sig
 
 
@@ -98,6 +99,7 @@ class MLLogitStrategy(Strategy):
         self._clf = None
         self._scaler = None
         self._feature_cols = None
+        self._const_proba = 0.5
 
     def _make_features(self, df: pd.DataFrame) -> pd.DataFrame:
         close = df["close"].astype(float)
@@ -130,9 +132,22 @@ class MLLogitStrategy(Strategy):
         y = (df["close"].shift(-self.lookahead) > df["close"]).astype(int)  # next-bar up?
         mask = y.notna()
         x_train, y_train = x[mask], y[mask].astype(int)
+        self._feature_cols = x.columns.tolist()
+
+        if x_train.empty:
+            self._clf = None
+            self._scaler = None
+            self._const_proba = 0.5
+            return
 
         scaler = StandardScaler()
         x_train_scaled = scaler.fit_transform(x_train)
+
+        if len(np.unique(y_train)) < 2:
+            self._clf = None
+            self._scaler = scaler
+            self._const_proba = 0.5
+            return
 
         clf = LogisticRegression(
             penalty="l2",
@@ -142,23 +157,34 @@ class MLLogitStrategy(Strategy):
             random_state=self.seed,
             n_jobs=None
         )
-        clf.fit(x_train_scaled, y_train.values)
+        try:
+            clf.fit(x_train_scaled, y_train.values)
+        except ValueError:
+            self._clf = None
+            self._scaler = scaler
+            self._const_proba = 0.5
+            return
+
         self._clf = clf
         self._scaler = scaler
-        self._feature_cols = x.columns.tolist()
+        self._const_proba = None
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
-        assert self._clf is not None, "Call fit() before generate_signals()."
+        if self._feature_cols is None:
+            self.fit(df)
+        if self._feature_cols is None:
+            raise RuntimeError("Call fit() before generate_signals().")
+
         x = self._make_features(df)[self._feature_cols]
-        x_scaled = self._scaler.transform(x)
-        proba_up = pd.Series(self._clf.predict_proba(x_scaled)[:, 1], index=df.index)
+        if self._clf is not None:
+            x_scaled = self._scaler.transform(x)
+            proba_up = pd.Series(self._clf.predict_proba(x_scaled)[:, 1], index=df.index)
+        else:
+            proba_up = pd.Series(self._const_proba, index=df.index, dtype=float)
 
         sig = pd.Series(0, index=df.index, dtype=int)
         sig[proba_up > self.up_th] = 1
         sig[proba_up < self.dn_th] = -1
-
-        # optional: 1-bar execution lag to avoid look-ahead
-        sig = sig.shift(1).fillna(0).astype(int)
         sig.name = "signal"
         return sig
 
@@ -173,8 +199,10 @@ class CombinedStrategy(Strategy):
         self.rules = rules
 
     def fit(self, df: pd.DataFrame) -> None:
-        self.ml.fit(df)
-        self.rules.fit(df)
+        if hasattr(self.ml, "fit"):
+            self.ml.fit(df)
+        if hasattr(self.rules, "fit"):
+            self.rules.fit(df)
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
         s1 = self.ml.generate_signals(df).astype(int)
