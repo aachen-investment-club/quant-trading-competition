@@ -1,4 +1,4 @@
-# .env
+.env
 # HOST_GUIDE.md
 # /infra
 /data
@@ -25,4 +25,3 @@ override.tf.json
 .terraform-version
 .terraform.lock.hcl
 .terraform.tfvars
-
