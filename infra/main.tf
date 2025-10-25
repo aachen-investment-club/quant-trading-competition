@@ -21,10 +21,12 @@ variable "universe_csv" {
 }
 variable "lambda_timeout" {
   type    = number
-  default = 60
+  # CHANGED: Set to max (900 seconds / 15 minutes)
+  default = 900
 }
 variable "lambda_memory_mb" {
-  type    = number
+  type    
+  = number
   default = 1024
 }
 variable "create_buckets" {
@@ -41,34 +43,70 @@ variable "table_name" {
   type    = string
   default = "trading_competition_scores"
 }
+# CHANGED: Added a variable for the competition ID
+variable "competition_id" {
+  type    = string
+  default = "quant-comp-2025"
+  description = "The identifier for the DynamoDB GSI Hash Key."
+}
+
 # ---------- OPTIONAL: CREATE BUCKETS OR REUSE EXISTING ----------
 resource "aws_s3_bucket" "submissions" {
-  count        = var.create_buckets ? 1 : 0
+  count     
+   = var.create_buckets ? 1 : 0
   bucket       = var.submissions_bucket_name
   force_destroy = false
 }
 
+# CHANGED: Added public access block for submissions bucket
+resource "aws_s3_bucket_public_access_block" "submissions_block" {
+  count  = var.create_buckets ? 1 : 0
+  bucket = aws_s3_bucket.submissions[0].id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 resource "aws_s3_bucket" "testdata" {
-  count        = var.create_buckets ? 1 : 0
+  count        = var.create_buckets ?
+ 1 : 0
   bucket       = var.testdata_bucket_name
   force_destroy = false
 }
 
+# CHANGED: Added public access block for testdata bucket
+resource "aws_s3_bucket_public_access_block" "testdata_block" {
+  count  = var.create_buckets ? 1 : 0
+  bucket = aws_s3_bucket.testdata[0].id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 data "aws_s3_bucket" "submissions" {
-  count = var.create_buckets ? 0 : 1
+  count = var.create_buckets ?
+ 0 : 1
   bucket = var.submissions_bucket_name
 }
 
 data "aws_s3_bucket" "testdata" {
-  count = var.create_buckets ? 0 : 1
+  count = var.create_buckets ?
+ 0 : 1
   bucket = var.testdata_bucket_name
 }
 
 locals {
-  submissions_bucket_arn = var.create_buckets ? aws_s3_bucket.submissions[0].arn : data.aws_s3_bucket.submissions[0].arn
+  submissions_bucket_arn = var.create_buckets ?
+ aws_s3_bucket.submissions[0].arn : data.aws_s3_bucket.submissions[0].arn
   submissions_bucket_id  = var.create_buckets ? aws_s3_bucket.submissions[0].id  : data.aws_s3_bucket.submissions[0].id
-  testdata_bucket_arn    = var.create_buckets ? aws_s3_bucket.testdata[0].arn    : data.aws_s3_bucket.testdata[0].arn
-  testdata_bucket_id     = var.create_buckets ? aws_s3_bucket.testdata[0].id     : data.aws_s3_bucket.testdata[0].id
+  testdata_bucket_arn    = var.create_buckets ?
+ aws_s3_bucket.testdata[0].arn    : data.aws_s3_bucket.testdata[0].arn
+  testdata_bucket_id     = var.create_buckets ?
+ aws_s3_bucket.testdata[0].id     : data.aws_s3_bucket.testdata[0].id
   lambda_source_dir      = coalesce(var.lambda_source_dir, "${path.module}/lambda")
 }
 
@@ -83,16 +121,35 @@ resource "aws_dynamodb_table" "scores" {
     name = "participant_id"
     type = "S"
   }
-
   attribute {
     name = "submission_id"
     type = "S"
+  }
+  # CHANGED: Added attributes for the new GSI
+  attribute {
+    name = "competition_id"
+    type = "S"
+  }
+  attribute {
+    name = "score"
+    type = "N"
+  }
+
+  # CHANGED: Added GSI for querying the leaderboard by score
+  global_secondary_index {
+    name               = "LeaderboardIndex"
+    hash_key           = "competition_id"
+    range_key          = "score"
+    write_capacity     = 0 # Not needed for PAY_PER_REQUEST
+    read_capacity      = 0 # Not needed for PAY_PER_REQUEST
+    projection_type    = "ALL"
   }
 }
 
 # ---------- PACKAGE LAMBDA FROM LOCAL SOURCE ----------
 # Expect file at: ${local.lambda_source_dir}/evaluator_lambda.py
-data "archive_file" "evaluator_zip" {
+data 
+ "archive_file" "evaluator_zip" {
   type        = "zip"
   output_path = "${path.module}/evaluator_lambda.zip"
   source {
@@ -113,7 +170,8 @@ data "aws_iam_policy_document" "lambda_assume" {
 }
 
 resource "aws_iam_role" "lambda_role" {
-  name               = "trading-comp-evaluator-lambda-role"
+  name        
+       = "trading-comp-evaluator-lambda-role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -132,7 +190,8 @@ data "aws_iam_policy_document" "lambda_policy" {
     actions = ["s3:GetObject"]
     resources = [
       "${local.testdata_bucket_arn}/${var.testdata_key}"
-    ]
+  
+     ]
   }
 
   statement {
@@ -146,7 +205,11 @@ data "aws_iam_policy_document" "lambda_policy" {
     sid     = "DDBWriteScores"
     effect  = "Allow"
     actions = ["dynamodb:PutItem"]
-    resources = [aws_dynamodb_table.scores.arn]
+    resources = [
+      aws_dynamodb_table.scores.arn,
+      # CHANGED: Added permission to write to the GSI
+      "${aws_dynamodb_table.scores.arn}/index/LeaderboardIndex"
+    ]
   }
 }
 
@@ -159,7 +222,8 @@ resource "aws_iam_role_policy" "lambda_inline" {
 data "aws_caller_identity" "current" {}
 
 # ---------- LAMBDA FUNCTION ----------
-resource "aws_lambda_function" "evaluator" {
+resource "aws_lambda_function" 
+ "evaluator" {
   function_name = "trading-comp-evaluator-lambda"
   role          = aws_iam_role.lambda_role.arn
   handler       = "evaluator_lambda.lambda_handler"
@@ -173,9 +237,12 @@ resource "aws_lambda_function" "evaluator" {
     variables = {
       SUBMISSIONS_BUCKET = local.submissions_bucket_id
       TESTDATA_BUCKET    = local.testdata_bucket_id
-      TESTDATA_KEY       = var.testdata_key
+     
+       TESTDATA_KEY       = var.testdata_key
       DDB_TABLE          = aws_dynamodb_table.scores.name
       UNIVERSE           = var.universe_csv
+      # CHANGED: Added new env var for the GSI
+      COMPETITION_ID     = var.competition_id
     }
   }
 }
@@ -189,7 +256,8 @@ resource "aws_lambda_permission" "allow_s3_invoke" {
   source_arn    = local.submissions_bucket_arn
 }
 
-# ---------- S3 EVENT NOTIFICATION (ObjectCreated + suffix: submission.py) ----------
+# ---------- S3 EVENT NOTIFICATION 
+ (ObjectCreated + suffix: submission.py) ----------
 resource "aws_s3_bucket_notification" "submissions_notify" {
   bucket = local.submissions_bucket_id
 
