@@ -209,7 +209,7 @@ if __name__ == "__main__":
     # 4. Convert to DataFrame and save to CSV
     df = pd.DataFrame(competition_data)
     
-    output_file = "competition_test_data.csv"
+    output_file = "competition_comp_data.csv"
     df.to_csv(output_file, index=False)
     
     print(f"\nSuccessfully generated {len(competition_data)} data points.")

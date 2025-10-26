@@ -16,11 +16,11 @@ Your submission is run in a secure, event-driven AWS Lambda environment. The pro
 
 Your *only* submitted file, `submission/submission.py`, **must** provide three things:
 
-1.  **A `Product` Class**: You must define a class that inherits from `backtest.pricing.Product` and implements the `present_value(self, market: Market) -> float` method. This is how the evaluator knows the value of your positions.
+1.  **A `Product` Class**: You must define a class that inherits from `pricing.Product` and implements the `present_value(self, market: Market) -> float` method. This is how the evaluator knows the value of your positions.
 2.  **A Trader Class**: This class must have an `on_quote(self, market: Market, portfolio: Portfolio)` method. This is your main logic loop.
 3.  **A `build_trader` Function**: This function must return an instance of your Trader Class.
 
-The `backtest.pricing` modules (`Product`, `Position`, `Market`, `Portfolio`) are **mocked and provided for you** in the Lambda environment. You just need to import and use them.
+The `pricing` modules (`Product`, `Position`, `Market`, `Portfolio`) are **mocked and provided for you** in the Lambda environment. You just need to import and use them.
 
 ## 2\. Local Development
 
@@ -35,7 +35,7 @@ You can develop and test your strategy locally using the provided `src/` directo
 2.  **Write Your Strategy**: You can write your strategy in a separate file (e.g., `my_strategy.py`) that follows the `src/strategies/Strategy.py` abstract class.
 3.  **Test Locally**: Use the `src/Engine.py` backtester to run your strategy against a local data file. You will need to write a small script to configure and run the engine with your strategy.
 
-**Note:** The local `src/Engine.py` is a helper. Your final *submission* must be a single `submission.py` file that uses the `backtest.pricing` imports, as shown in the example below.
+**Note:** The local `src/Engine.py` is a helper. Your final *submission* must be a single `submission.py` file that uses the `pricing` imports, as shown in the example below.
 
 ## 3\. Your `submission.py` File (Example)
 
@@ -43,10 +43,10 @@ Use this as a template for your `submission/submission.py`:
 
 ```python
 # --- These imports are provided by the Lambda environment ---
-from backtest.pricing.Product import Product
-from backtest.pricing.Position import Position
-from backtest.pricing.Market import Market
-from backtest.pricing.Portfolio import Portfolio
+from pricing.Product import Product
+from pricing.Position import Position
+from pricing.Market import Market
+from pricing.Portfolio import Portfolio
 
 # --- 1. Define Your Product Class ---
 class MyFX(Product):

@@ -3,6 +3,7 @@ import boto3
 from decimal import Decimal
 # CHANGED: Added numpy. This MUST be available in your Lambda deployment (e.g., via a Layer).
 import numpy as np
+import pandas as pd
 
 s3  = boto3.client("s3")
 ddb = boto3.resource("dynamodb")
@@ -69,7 +70,7 @@ class Portfolio():
              print(f"Warning: Could not get price for {new_position.product.id}. Skipping trade.")
              return
 
-        ts = self.market.quotes[new_position.product.id]['timestamp']
+        ts = self.market.quotes[new_position.product.id]['timestep']
 
         if self.cash < new_position.price * new_position.quantity:
             # Don't raise, just log. This matches the "swallow trader exceptions" logic later.
@@ -82,7 +83,7 @@ class Portfolio():
             cur.rebalance(new_position.price, new_position.quantity)
         else:
             self.positions[new_position.product.id] = new_position
-        self.tradelog[new_position.product.id].append({"timestamp": ts, "quantity": new_position.quantity, "price": new_position.price})
+        self.tradelog[new_position.product.id].append({"timestep": ts, "quantity": new_position.quantity, "price": new_position.price})
     def exit(self, id):
         if id not in self.positions: 
             print(f"Warning: Attempted to exit position not found: {id}. Skipping trade.")
@@ -101,34 +102,33 @@ class Portfolio():
             exit_value = p.mark_to_market(self.market) # Fallback
 
         self.cash += exit_value
-        self.tradelog[id] = {"timestamp": self.market.quotes[id]['timestamp'], "quantity": p.quantity, "price": p.price}
+        self.tradelog[id] = {"timestep": self.market.quotes[id]['timestep'], "quantity": p.quantity, "price": p.price}
         self.positions.pop(id)
 
 # Expose expected modules so participant imports work
-mod_bt = types.M-oduleType("backtest"); mod_pricing = types.ModuleType("backtest.pricing")
+mod_pricing = types.ModuleType("pricing")
 mod_pricing.Market = Market
 mod_pricing.Product = Product
 mod_pricing.Position = Position
 mod_pricing.Portfolio = Portfolio
-sys.modules['backtest'] = mod_bt
-sys.modules['backtest.pricing'] = mod_pricing
-sys.modules['backtest.pricing.Market']    = types.ModuleType('backtest.pricing.Market');    sys.modules['backtest.pricing.Market'].Market    = Market
-sys.modules['backtest.pricing.Product']   = types.ModuleType('backtest.pricing.Product');   sys.modules['backtest.pricing.Product'].Product   = Product
-sys.modules['backtest.pricing.Position']  = types.ModuleType('backtest.pricing.Position');  sys.modules['backtest.pricing.Position'].Position = Position
-sys.modules['backtest.pricing.Portfolio'] = types.ModuleType('backtest.pricing.Portfolio'); sys.modules['backtest.pricing.Portfolio'].Portfolio = Portfolio
+sys.modules['pricing'] = mod_pricing
+sys.modules['pricing.Market']    = types.ModuleType('pricing.Market');    sys.modules['pricing.Market'].Market    = Market
+sys.modules['pricing.Product']   = types.ModuleType('pricing.Product');   sys.modules['pricing.Product'].Product   = Product
+sys.modules['pricing.Position']  = types.ModuleType('pricing.Position');  sys.modules['pricing.Position'].Position = Position
+sys.modules['pricing.Portfolio'] = types.ModuleType('pricing.Portfolio'); sys.modules['pricing.Portfolio'].Portfolio = Portfolio
 
 # ---- CSV readers ----
 def iter_quotes_from_csv_long(csv_bytes, universe):
-    # long format: timestamp,id,price (plus ignored columns)
+    # long format: timestep,id,price (plus ignored columns)
     f = io.StringIO(csv_bytes.decode('utf-8'))
     reader = csv.DictReader(f)
     last_ts = None; batch = []
     for row in reader:
         if row.get('id') not in universe: 
             continue
-        ts = row.get('timestamp')
+        ts = row.get('timestep')
         # HACK: Support the 'Stock.py' file which expects a dict-like data object
-        q = {'id': row['id'], 'timestamp': ts, 'price': float(row['price']), 'data': {'Price Close': float(row['price'])}}
+        q = {'id': row['id'], 'timestep': ts, 'price': float(row['price']), 'data': {'Price Close': float(row['price'])}}
         if last_ts is None: last_ts = ts
         if ts != last_ts:
             yield batch
@@ -139,17 +139,17 @@ def iter_quotes_from_csv_long(csv_bytes, universe):
         yield batch
 
 def iter_quotes_from_csv_wide(csv_bytes, universe):
-    # wide format: timestamp, EURUSD, GBPUSD, ...
+    # wide format: timestep, EURUSD, GBPUSD, ...
     f = io.StringIO(csv_bytes.decode('utf-8'))
     reader = csv.DictReader(f)
     for row in reader:
-        ts = row.get('timestamp')
+        ts = row.get('timestep')
         batch = []
         for ric in universe:
             if ric in row and row[ric] not in (None, '', 'NaN'):
                 price = float(row[ric])
                 # HACK: Support the 'Stock.py' file which expects a dict-like data object
-                batch.append({'id': ric, 'timestamp': ts, 'price': price, 'data': {'Price Close': price}})
+                batch.append({'id': ric, 'timestep': ts, 'price': price, 'data': {'Price Close': price}})
         if batch:
             yield batch
 
@@ -239,16 +239,13 @@ def evaluate_submission(py_path, table, participant_id, submission_id, competiti
     item = {
         'participant_id': participant_id,
         'submission_id':  submission_id,
-        # CHANGED: Added GSI hash key
         'competition_id': competition_id,
-        # CHANGED: 'score' is now Sharpe, and a Decimal
         'score':          Decimal(str(round(score, 6))),
-        # --- Kept old metrics + added new ones for clarity ---
         'sharpe_ratio':   Decimal(str(round(sharpe, 6))),
         'pnl':            Decimal(str(round(pnl, 2))),
         'percent_return': Decimal(str(round(percent_return, 6))),
         'final_nav':      Decimal(str(round(final_nav, 2))),
-        'timestamp':      int(time.time()),
+        'timestep':       int(time.time()),
         'universe':       universe,
         'test_key':       test_key,
     }
@@ -261,7 +258,6 @@ def lambda_handler(event, context):
     test_key           = os.environ['TESTDATA_KEY']
     ddb_table_name     = os.environ['DDB_TABLE']
     universe           = os.environ.get('UNIVERSE', 'EURUSD,GBPUSD,USDJPY').split(',')
-    # CHANGED: Get GSI ID from environment
     competition_id     = os.environ.get('COMPETITION_ID', 'default-comp')
     
     table = ddb.Table(ddb_table_name)
@@ -293,9 +289,8 @@ def lambda_handler(event, context):
                 'participant_id': participant_id,
                 'submission_id':  submission_id,
                 'competition_id': competition_id,
-                # CHANGED: Set score to a very low number instead of 0
                 'score':          Decimal('-999'),
                 'error':          str(e)[:500],
-                'timestamp':      int(time.time())
+                'timestep':      int(time.time())
             })
     return {'ok': True}

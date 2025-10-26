@@ -36,7 +36,7 @@ This guide details the setup and operation of the competition infrastructure. Th
     competition_id          = "quant-comp-2025" 
     
     # Path to the test data you will upload
-    testdata_key            = "hidden/test_data.csv"
+    testdata_key            = "hidden/comp_data.csv"
     
     # Comma-separated list of product IDs in your test data
     universe_csv            = "EURUSD,PRODUCT_B"
@@ -81,7 +81,7 @@ The evaluator Lambda requires **`numpy`** and **`pandas`** to calculate the Shar
 You must upload your hidden test data to the S3 bucket and key specified in your `terraform.tfvars`.
 
 ```bash
-aws s3 cp /path/to/your/local_test_data.csv s3://your-comp-testdata-unique/hidden/test_data.csv
+aws s3 cp /path/to/your/local_comp_data.csv s3://your-comp-testdata-unique/hidden/comp_data.csv
 ```
 
 ### 4.3 Create Participant IAM Policies

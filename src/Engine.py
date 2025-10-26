@@ -30,7 +30,7 @@ class Engine():
         self.market: Market = self.strategy.portfolio.market
 
         # backtest results
-        self.portfolio_nav: dict[pd.Timestamp, float] = {}
+        self.portfolio_nav: dict[pd.timestep, float] = {}
 
 
     def run(self) -> None:
@@ -64,7 +64,7 @@ class Engine():
 
                 # track backtest results
                 if is_clock_tick:
-                    clock_ts = next(q['timestamp'] for q in quote_batch if q['id'] == 'Clock')
+                    clock_ts = next(q['timestep'] for q in quote_batch if q['id'] == 'Clock')
                     self.portfolio_nav[clock_ts] = self.portfolio.nav()
 
                 # update progress bar

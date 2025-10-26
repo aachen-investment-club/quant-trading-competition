@@ -22,7 +22,7 @@ class Portfolio():
     def enter(self: "Portfolio", new_position: Position) -> None:
 
         # get market data
-        timestamp = self.market.quotes[new_position.product.id]['timestamp']
+        timestep = self.market.quotes[new_position.product.id]['timestep']
         new_position.price = new_position.product.present_value(self.market)
 
         # check if enough funds
@@ -43,7 +43,7 @@ class Portfolio():
 
             # update tradelog
             self.tradelog[new_position.product.id].append({
-                "timestamp": timestamp,
+                "timestep": timestep,
                 "quantity": new_position.quantity,
                 "price": new_position.price
                 })
@@ -56,7 +56,7 @@ class Portfolio():
             exit_position = self.positions[id]
             self.cash +=  exit_position.mark_to_market(self.market)
             self.tradelog[id] = {
-                "timestamp": self.market.quotes[id]['timestamp'],
+                "timestep": self.market.quotes[id]['timestep'],
                 "quantity": exit_position.quantity,
                 "price": exit_position.price
                 }

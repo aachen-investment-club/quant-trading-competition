@@ -1,32 +1,32 @@
 # ---------- VARIABLES ----------
-variable "region" { 
-  type = string  
-  default = "eu-central-1" 
+variable "region" {
+  type    = string
+  default = "eu-central-1"
 }
 variable "submissions_bucket_name" {
   type        = string
   description = "e.g. \"trading-comp-submission-bucket\""
+  default     = "comp-submission-bucket"
 }
 variable "testdata_bucket_name" {
   type        = string
   description = "e.g. \"trading-comp-test-bucket\""
+  default     = "comp-eval-bucket"
 }
 variable "testdata_key" {
   type    = string
-  default = "hidden/forex_test.csv"
+  default = "hidden/comp_data.csv"
 }
 variable "universe_csv" {
   type    = string
-  default = "EURUSD,GBPUSD,USDJPY"
+  default = "INTERESTingProduct,James_Fund_007"
 }
 variable "lambda_timeout" {
-  type    = number
-  # CHANGED: Set to max (900 seconds / 15 minutes)
+  type = number
   default = 900
 }
 variable "lambda_memory_mb" {
-  type    
-  = number
+  type    = number
   default = 1024
 }
 variable "create_buckets" {
@@ -43,22 +43,20 @@ variable "table_name" {
   type    = string
   default = "trading_competition_scores"
 }
-# CHANGED: Added a variable for the competition ID
+
 variable "competition_id" {
-  type    = string
-  default = "quant-comp-2025"
+  type        = string
+  default     = "quant-comp-2025"
   description = "The identifier for the DynamoDB GSI Hash Key."
 }
 
 # ---------- OPTIONAL: CREATE BUCKETS OR REUSE EXISTING ----------
 resource "aws_s3_bucket" "submissions" {
-  count     
-   = var.create_buckets ? 1 : 0
-  bucket       = var.submissions_bucket_name
+  count         = var.create_buckets ? 1 : 0
+  bucket        = var.submissions_bucket_name
   force_destroy = false
 }
 
-# CHANGED: Added public access block for submissions bucket
 resource "aws_s3_bucket_public_access_block" "submissions_block" {
   count  = var.create_buckets ? 1 : 0
   bucket = aws_s3_bucket.submissions[0].id
@@ -70,13 +68,11 @@ resource "aws_s3_bucket_public_access_block" "submissions_block" {
 }
 
 resource "aws_s3_bucket" "testdata" {
-  count        = var.create_buckets ?
- 1 : 0
-  bucket       = var.testdata_bucket_name
+  count         = var.create_buckets ? 1 : 0
+  bucket        = var.testdata_bucket_name
   force_destroy = false
 }
 
-# CHANGED: Added public access block for testdata bucket
 resource "aws_s3_bucket_public_access_block" "testdata_block" {
   count  = var.create_buckets ? 1 : 0
   bucket = aws_s3_bucket.testdata[0].id
@@ -88,25 +84,20 @@ resource "aws_s3_bucket_public_access_block" "testdata_block" {
 }
 
 data "aws_s3_bucket" "submissions" {
-  count = var.create_buckets ?
- 0 : 1
+  count  = var.create_buckets ? 0 : 1
   bucket = var.submissions_bucket_name
 }
 
 data "aws_s3_bucket" "testdata" {
-  count = var.create_buckets ?
- 0 : 1
+  count  = var.create_buckets ? 0 : 1
   bucket = var.testdata_bucket_name
 }
 
 locals {
-  submissions_bucket_arn = var.create_buckets ?
- aws_s3_bucket.submissions[0].arn : data.aws_s3_bucket.submissions[0].arn
-  submissions_bucket_id  = var.create_buckets ? aws_s3_bucket.submissions[0].id  : data.aws_s3_bucket.submissions[0].id
-  testdata_bucket_arn    = var.create_buckets ?
- aws_s3_bucket.testdata[0].arn    : data.aws_s3_bucket.testdata[0].arn
-  testdata_bucket_id     = var.create_buckets ?
- aws_s3_bucket.testdata[0].id     : data.aws_s3_bucket.testdata[0].id
+  submissions_bucket_arn = var.create_buckets ? aws_s3_bucket.submissions[0].arn : data.aws_s3_bucket.submissions[0].arn
+  submissions_bucket_id  = var.create_buckets ? aws_s3_bucket.submissions[0].id : data.aws_s3_bucket.submissions[0].id
+  testdata_bucket_arn    = var.create_buckets ? aws_s3_bucket.testdata[0].arn : data.aws_s3_bucket.testdata[0].arn
+  testdata_bucket_id     = var.create_buckets ? aws_s3_bucket.testdata[0].id : data.aws_s3_bucket.testdata[0].id
   lambda_source_dir      = coalesce(var.lambda_source_dir, "${path.module}/lambda")
 }
 
@@ -135,21 +126,19 @@ resource "aws_dynamodb_table" "scores" {
     type = "N"
   }
 
-  # CHANGED: Added GSI for querying the leaderboard by score
   global_secondary_index {
-    name               = "LeaderboardIndex"
-    hash_key           = "competition_id"
-    range_key          = "score"
-    write_capacity     = 0 # Not needed for PAY_PER_REQUEST
-    read_capacity      = 0 # Not needed for PAY_PER_REQUEST
-    projection_type    = "ALL"
+    name            = "LeaderboardIndex"
+    hash_key        = "competition_id"
+    range_key       = "score"
+    write_capacity  = 0 
+    read_capacity   = 0 
+    projection_type = "ALL"
   }
 }
 
 # ---------- PACKAGE LAMBDA FROM LOCAL SOURCE ----------
 # Expect file at: ${local.lambda_source_dir}/evaluator_lambda.py
-data 
- "archive_file" "evaluator_zip" {
+data "archive_file" "evaluator_zip" {
   type        = "zip"
   output_path = "${path.module}/evaluator_lambda.zip"
   source {
@@ -170,34 +159,32 @@ data "aws_iam_policy_document" "lambda_assume" {
 }
 
 resource "aws_iam_role" "lambda_role" {
-  name        
-       = "trading-comp-evaluator-lambda-role"
+  name               = "trading-comp-evaluator-lambda-role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
 # Inline policy: CloudWatch Logs, S3 GetObject (testdata + submissions), DynamoDB PutItem
 data "aws_iam_policy_document" "lambda_policy" {
   statement {
-    sid     = "Logs"
-    effect  = "Allow"
-    actions = ["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"]
+    sid       = "Logs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
     resources = ["arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:*"]
   }
 
   statement {
-    sid     = "S3ReadTestData"
-    effect  = "Allow"
-    actions = ["s3:GetObject"]
+    sid       = "S3ReadTestData"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
     resources = [
       "${local.testdata_bucket_arn}/${var.testdata_key}"
-  
-     ]
+    ]
   }
 
   statement {
-    sid     = "S3ReadSubmissionsObjects"
-    effect  = "Allow"
-    actions = ["s3:GetObject"]
+    sid       = "S3ReadSubmissionsObjects"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
     resources = ["${local.submissions_bucket_arn}/*"]
   }
 
@@ -222,26 +209,23 @@ resource "aws_iam_role_policy" "lambda_inline" {
 data "aws_caller_identity" "current" {}
 
 # ---------- LAMBDA FUNCTION ----------
-resource "aws_lambda_function" 
- "evaluator" {
-  function_name = "trading-comp-evaluator-lambda"
-  role          = aws_iam_role.lambda_role.arn
-  handler       = "evaluator_lambda.lambda_handler"
-  runtime       = "python3.11"
-  filename      = data.archive_file.evaluator_zip.output_path
-  timeout       = var.lambda_timeout
-  memory_size   = var.lambda_memory_mb
+resource "aws_lambda_function" "evaluator" {
+  function_name    = "trading-comp-evaluator-lambda"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "evaluator_lambda.lambda_handler"
+  runtime          = "python3.11"
+  filename         = data.archive_file.evaluator_zip.output_path
+  timeout          = var.lambda_timeout
+  memory_size      = var.lambda_memory_mb
   source_code_hash = data.archive_file.evaluator_zip.output_base64sha256
 
   environment {
     variables = {
       SUBMISSIONS_BUCKET = local.submissions_bucket_id
       TESTDATA_BUCKET    = local.testdata_bucket_id
-     
-       TESTDATA_KEY       = var.testdata_key
+      TESTDATA_KEY       = var.testdata_key
       DDB_TABLE          = aws_dynamodb_table.scores.name
       UNIVERSE           = var.universe_csv
-      # CHANGED: Added new env var for the GSI
       COMPETITION_ID     = var.competition_id
     }
   }
@@ -256,8 +240,7 @@ resource "aws_lambda_permission" "allow_s3_invoke" {
   source_arn    = local.submissions_bucket_arn
 }
 
-# ---------- S3 EVENT NOTIFICATION 
- (ObjectCreated + suffix: submission.py) ----------
+# ---------- S3 EVENT NOTIFICATION (ObjectCreated + suffix: submission.py) ----------
 resource "aws_s3_bucket_notification" "submissions_notify" {
   bucket = local.submissions_bucket_id
 
@@ -271,7 +254,7 @@ resource "aws_s3_bucket_notification" "submissions_notify" {
 }
 
 # ---------- OUTPUTS ----------
-output "lambda_name"     { value = aws_lambda_function.evaluator.function_name }
-output "scores_table"    { value = aws_dynamodb_table.scores.name }
+output "lambda_name" { value = aws_lambda_function.evaluator.function_name }
+output "scores_table" { value = aws_dynamodb_table.scores.name }
 output "submissions_arn" { value = local.submissions_bucket_arn }
-output "testdata_key"    { value = var.testdata_key }
+output "testdata_key" { value = var.testdata_key }

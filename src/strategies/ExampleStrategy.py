@@ -16,11 +16,11 @@ class ExampleStrategy(Strategy):
         if 'Clock' not in market.quotes:
             return
             
-        timestamp = market.quotes['Clock']['timestamp']
+        timestep = market.quotes['Clock']['timestep']
 
-        if timestamp == self.hyperparams['buy_date']:
+        if timestep == self.hyperparams['buy_date']:
             new_position = Position(Stock(self.hyperparams['ric']), 100)
             portfolio.enter(new_position)
 
-        if timestamp == self.hyperparams['sell_date']:
+        if timestep == self.hyperparams['sell_date']:
             portfolio.exit("JPM.N")
