@@ -27,3 +27,4 @@ override.tf.json
 *.terraform.tfvars
 *.env
 .env
+/python

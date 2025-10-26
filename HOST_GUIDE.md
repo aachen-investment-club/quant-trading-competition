@@ -68,11 +68,7 @@ The evaluator Lambda requires **`numpy`** and **`pandas`** to calculate the Shar
     ```
 2.  Publish the Lambda Layer via the AWS CLI:
     ```bash
-    aws lambda publish-layer-version \
-        --layer-name pandas-numpy-layer \
-        --description "Pandas and Numpy dependencies" \
-        --zip-file fileb://pandas_numpy_layer.zip \
-        --compatible-runtimes python3.11
+    aws lambda publish-layer-version --layer-name pandas-numpy-layer --description "Pandas and Numpy dependencies" --zip-file fileb://pandas_numpy_layer.zip --compatible-runtimes python3.11
     ```
 3.  Note the `LayerVersionArn` from the output. Go to the AWS Lambda console, find your `trading-comp-evaluator-lambda` function, and **manually add this layer** to it.
 
