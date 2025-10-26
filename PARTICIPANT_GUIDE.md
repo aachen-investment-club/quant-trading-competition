@@ -112,7 +112,7 @@ class MyTrader:
 def build_trader(universe: list[str]) -> MyTrader:
     """This function is called by the evaluator to get your trader."""
     return MyTrader(universe)
-```
+
 
 ## 4\. How to Submit
 
@@ -145,6 +145,14 @@ def build_trader(universe: list[str]) -> MyTrader:
     ```bash
     SUBMISSION_ID=my-first-try python tools/submit.py
     ```
+
+    ### Alternative: submit from inside Docker
+   The image also provides a `submit` shortcut which calls the same script:
+   ```bash
+   docker run --rm -it   -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION   -e SUBMISSIONS_BUCKET -e PARTICIPANT_ID   -v "$(pwd):/usr/src/app" trading-comp-env submit
+
+   docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env submit
+   ```
 
 ## 5\. Rules & Guidelines
 
