@@ -1,4 +1,36 @@
 .env
+<<<<<<< HEAD
+# HOST_GUIDE.md
+# /infra
+/data
+
+__pycache__
+*.pyc
+.ipynb_checkpoints
+.vscode
+.DS_Store
+
+.terraform
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.terragrunt-cache
+*.terragrunt-tfstate-backups
+*.terraformrc
+*.terragruntrc
+*.terraform-version
+*.terraform.lock.hcl
+*.terraform.tfvars
+*.env
+.env
+/python
+/data
+=======
 HOST_GUIDE.md
 /infra
 /data/*
@@ -12,3 +44,4 @@ __pycache__
 .ipynb_checkpoints
 .ipynb_checkpoints/*.ipynb
 *.log
+>>>>>>> main

@@ -1,128 +1,164 @@
 # Trading Competition — Participant Guide
 
-Welcome! This guide explains **how your strategy is evaluated**, how to **run the local environment (Docker or native Python)**, and **how to submit** your code.
+Welcome to the competition\! This guide explains how to develop your strategy, test it locally, and submit it for evaluation.
 
----
+## 1\. How Your Strategy is Evaluated
 
-## 1) How your strategy is evaluated
+Your submission is run in a secure, event-driven AWS Lambda environment. The process is:
 
-### What you ship
-- Put your code in the repository’s `submission/` directory.
-- You must provide **`submission.py`** with a function:
-  ```python
-  def build_strategy():
-      # return an object with generate_signals(df) -> pd.Series in {-1, 0, +1}
-  ```
-- Optional: other helper modules inside `submission/` (you can import them from `submission.py`).
+1.  **Submission**: You upload a `submission/` folder containing your `submission.py` file.
+2.  **Factory Call**: The evaluator imports your `submission.py` and calls your factory function `build_trader(universe: list[str])`. This must return your trader object.
+3.  **Event Loop**: The evaluator reads a hidden test data file batch by batch. For each batch, it calls your trader's primary method: `on_quote(market: Market, portfolio: Portfolio)`.
+4.  **Interface**: Your trader must interact with the provided `market` and `portfolio` objects to get prices and execute trades.
+5.  **Scoring**: Your final score is the **annualized Sharpe ratio** of your portfolio's NAV history over the backtest.
 
-### What the evaluator does
-When you submit, the pipeline runs like this:
+### The `submission.py` Interface
 
-1. Your local `tools/submit.py` uploads the entire `submission/` folder to **S3** under:
-   ```
-   s3://<SUBMISSIONS_BUCKET>/<PARTICIPANT_ID>/<SUBMISSION_ID>/...
-   ```
-   It uploads **`submission.py` last** to ensure your upload is complete before evaluation starts.
-2. An **S3 event** triggers an **AWS Lambda (orchestrator)** which starts a private **ECS Fargate** task using the evaluator image.
-3. Inside the evaluator container:
-   - Test data is read from **S3** (CSV).
-   - Your submission is downloaded.
-   - The evaluator imports `build_strategy()` from your `submission.py`.
-   - It calls `strategy.generate_signals(df)` → a Series of positions in `{-1,0,+1}` (applied on the *next* bar).
-   - Then it evaluates performance and writes **metrics + score** to **DynamoDB** (used by the leaderboard API).
+Your *only* submitted file, `submission/submission.py`, **must** provide three things:
 
-### Metrics (cost model and frequency)
-- **Transaction costs**: expressed in **basis points (bps)** and applied when the signal **changes** (`-1→0`, `0→+1`, etc.).
-- **Metrics recorded** include: annualized return, annualized volatility, Sharpe ratio (primary score), max drawdown, turnover.
+1.  **A `Product` Class**: You must define a class that inherits from `pricing.Product` and implements the `present_value(self, market: Market) -> float` method. This is how the evaluator knows the value of your positions.
+2.  **A Trader Class**: This class must have an `on_quote(self, market: Market, portfolio: Portfolio)` method. This is your main logic loop.
+3.  **A `build_trader` Function**: This function must return an instance of your Trader Class.
 
-> **Tip**: Make sure your `generate_signals` aligns with the evaluator’s assumption: positions from your signal are **entered on the next bar** (one‑bar lag).
+The `pricing` modules (`Product`, `Position`, `Market`, `Portfolio`) are **mocked and provided for you** in the Lambda environment. You just need to import and use them.
 
----
+## 2\. Local Development
 
-## 2) Local development
+You can develop and test your strategy locally using the provided `src/` directory, which mirrors the cloud environment's class structure.
 
-You can develop either with **Docker** (recommended) or a **native Python** environment.
+1.  **Set up Environment**:
+    ```bash
+    python -m venv .venv
+    source .venv/bin/activate  # or .\.venv\Scripts\activate on Windows
+    pip install -r requirements.txt
+    ```
+2.  **Write Your Strategy**: You can write your strategy in a separate file (e.g., `my_strategy.py`) that follows the `src/strategies/Strategy.py` abstract class.
+3.  **Test Locally**: Use the `src/Engine.py` backtester to run your strategy against a local data file. You will need to write a small script to configure and run the engine with your strategy.
 
-### Option A — Docker (recommended)
-1. From the project root, build the image:
+**Note:** The local `src/Engine.py` is a helper. Your final *submission* must be a single `submission.py` file that uses the `pricing` imports, as shown in the example below.
+
+## 3\. Your `submission.py` File (Example)
+
+Use this as a template for your `submission/submission.py`:
+
+```python
+# --- These imports are provided by the Lambda environment ---
+from pricing.Product import Product
+from pricing.Position import Position
+from pricing.Market import Market
+from pricing.Portfolio import Portfolio
+
+# --- 1. Define Your Product Class ---
+class MyFX(Product):
+    """A simple Product that gets its price from the market quotes."""
+    def __init__(self, id: str):
+        super().__init__(id)
+
+    def present_value(self, market: Market) -> float:
+        """Reads the 'price' from the quote provided by the evaluator."""
+        if self.id not in market.quotes:
+            return 0.0
+        return market.quotes[self.id]['price']
+
+# --- 2. Define Your Trader Class ---
+class MyTrader:
+    """A simple moving average crossover trader."""
+    def __init__(self, universe: list[str]):
+        self.products = {ric: MyFX(ric) for ric in universe}
+        
+        # Store price history
+        self.history = {ric: [] for ric in universe}
+        self.fast_ma = 5
+        self.slow_ma = 20
+        print(f"MyTrader initialized for {universe}")
+
+    def on_quote(self, market: Market, portfolio: Portfolio):
+        """This is called on every new batch of quotes."""
+        
+        ric = "EURUSD" # Trade only one product for simplicity
+        if ric not in market.quotes:
+            return
+
+        # --- 1. Update Data ---
+        price = market.quotes[ric]['price']
+        self.history[ric].append(price)
+        if len(self.history[ric]) > self.slow_ma:
+            self.history[ric].pop(0) # Keep history bounded
+        else:
+            return # Not enough data to trade
+
+        # --- 2. Calculate Signals ---
+        fast = sum(self.history[ric][-self.fast_ma:]) / self.fast_ma
+        slow = sum(self.history[ric]) / len(self.history[ric])
+        
+        has_position = ric in portfolio.positions
+
+        # --- 3. Execute Trades ---
+        try:
+            # Go Long
+            if fast > slow and not has_position:
+                pos = Position(self.products[ric], quantity=100)
+                portfolio.enter(pos)
+                
+            # Go Flat
+            elif fast < slow and has_position:
+                portfolio.exit(ric)
+                
+        except Exception as e:
+            # Portfolio.enter/exit can fail (e.g., insufficient funds)
+            print(f"Trade Error: {e}")
+
+# --- 3. Define the Factory Function (REQUIRED) ---
+def build_trader(universe: list[str]) -> MyTrader:
+    """This function is called by the evaluator to get your trader."""
+    return MyTrader(universe)
+
+
+## 4\. How to Submit
+
+1.  **Get Credentials**: Your host will provide you with:
+
+      * `AWS_REGION`
+      * `AWS_ACCESS_KEY_ID`
+      * `AWS_SECRET_ACCESS_KEY`
+      * `SUBMISSIONS_BUCKET`
+      * `PARTICIPANT_ID`
+
+2.  **Create `.env` File**: Create a file named `.env` in the root of the `quant-trading-competition` directory. Paste your credentials into it.
+
+    ```
+    AWS_REGION=eu-central-1
+    SUBMISSIONS_BUCKET=your-comp-submissions-unique
+    PARTICIPANT_ID=your-unique-id
+    AWS_ACCESS_KEY_ID=...
+    AWS_SECRET_ACCESS_KEY=...
+    ```
+
+3.  **Run Submission Script**: From the root directory, run `tools/submit.py`.
+
+    ```bash
+    python tools/submit.py
+    ```
+
+    You can also provide a custom label for your submission:
+
+    ```bash
+    SUBMISSION_ID=my-first-try python tools/submit.py
+    ```
+
+    ### Alternative: submit from inside Docker
+   The image also provides a `submit` shortcut which calls the same script:
    ```bash
-   docker build -t trading-comp-env .
-   ```
-2. Start JupyterLab (bind to your current folder so edits persist):
-   ```bash
-   # macOS/Linux
-   docker run --rm -it -p 8888:8888      -v "$(pwd):/usr/src/app"      trading-comp-env
+   docker run --rm -it   -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION   -e SUBMISSIONS_BUCKET -e PARTICIPANT_ID   -v "$(pwd):/usr/src/app" trading-comp-env submit
 
-   # Windows PowerShell
-   docker run --rm -it -p 8888:8888      -v "${PWD}:/usr/src/app"      trading-comp-env
-   ```
-   The Dockerfile exposes JupyterLab on port **8888** and disables the token by default.
-3. Use the notebooks under `src/notebooks/` or create your own. Make sure your code imports from `src/` as needed.
-
-### Option B — Native Python
-1. Install Python **3.10+** and recommended build tools.
-2. From the project root:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Windows PowerShell: .venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
-   ```
-3. Add the repository root to `PYTHONPATH` so `src/...` imports work:
-   ```bash
-   # macOS/Linux
-   export PYTHONPATH="$(pwd)"
-
-   # Windows PowerShell
-   $env:PYTHONPATH = (Get-Location).Path
-   ```
-4. Launch Jupyter if you prefer notebooks:
-   ```bash
-   jupyter lab
+   docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env submit
    ```
 
----
+## 5\. Rules & Guidelines
 
-## 3) How to submit
+  * **File**: You must submit a single `submission/submission.py`.
+  * **Timeout**: Your submission has **15 minutes** (900 seconds) to run. If it exceeds this, it will fail.
+  * **Available Libraries**: The Lambda environment includes the Python 3.11 standard library, `boto3`, **`numpy`**, and **`pandas`**. You *cannot* import other libraries like `scikit-learn` or `xgboost`.
+  * **Error Handling**: If your `on_quote` function raises an exception, the evaluator will catch it, log it, and move to the next data batch. Your backtest will continue, but you may miss trades.
 
-### Required environment variables
-You need credentials and a few variables. Either export them or put them in `.env` (and export manually). The minimum set is:
-- `AWS_REGION` (e.g. `eu-central-1`)
-- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (or role‑based creds on an EC2/Workspaces environment)
-- `SUBMISSIONS_BUCKET` (provided by the host)
-- `PARTICIPANT_ID` (provided by the host)
-
-### Submit using the Python CLI
-From the project root:
-```bash
-# Use a timestamp submission id (default)
-python tools/submit.py
-
-# Or specify a custom submission id
-SUBMISSION_ID=my-idea-01 python tools/submit.py
-```
-The script uploads **everything in `submission/`** and prints the target S3 prefix. Your evaluation starts immediately after `submission.py` is uploaded.
-
-### Alternative: submit from inside Docker
-The image also provides a `submit` shortcut which calls the same script:
-```bash
-docker run --rm -it   -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION   -e SUBMISSIONS_BUCKET -e PARTICIPANT_ID   -v "$(pwd):/usr/src/app"   trading-comp-env submit
-
-docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-evaluator submit
-```
-
----
-
-## 4) Checklist
-
-- [ ] Your `submission/` folder contains **`submission.py`** with **`build_strategy()`**.
-- [ ] `generate_signals(df)` returns a **Series of {-1, 0, +1}** aligned to **`df`**.
-- [ ] You tested locally on the provided CSV format (must include at least a `close` column; ideally `timestamp` too).
-- [ ] You can import `src/...` modules if you rely on shared helpers.
-- [ ] Your AWS credentials permit **`s3:PutObject`** into the **submissions bucket** (prefixed by your `PARTICIPANT_ID`).
-
----
-
-## 5) Troubleshooting
-
-
-Good luck! 🚀
+Good luck\!

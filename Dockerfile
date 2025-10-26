@@ -1,5 +1,5 @@
 # Participant & Evaluator image
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -28,6 +28,3 @@ EXPOSE 8888
 # (WORKDIR is /usr/src/app, which contains tools/submit.py)
 RUN printf '#!/bin/sh\nset -e\nexec python tools/submit.py "$@"\n' > /usr/local/bin/submit \
     && chmod +x /usr/local/bin/submit
-
-# Default command launches JupyterLab for participants
-CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--NotebookApp.token=''"]

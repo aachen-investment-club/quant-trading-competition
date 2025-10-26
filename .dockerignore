@@ -1,0 +1,39 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Git
+.git/
+.gitignore
+
+# Environment/config
+.env
+*.env
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+
+# Data & notebooks (large / local only)
+data/
+notebooks/
+
+# Terraform local state
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.backup
+infra/tfplan
+
+# Cache and build outputs
+*.egg-info/
+.dist/
+build/
+dist/
+
+# Local submissions and results
+tests/
+tools/
+submission/__pycache__/
+submission/*.pyc
