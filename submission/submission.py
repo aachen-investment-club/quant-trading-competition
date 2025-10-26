@@ -57,8 +57,8 @@ class TestTrader:
         """
         This is the main event loop called by the evaluator.
         """
-        # We only care about EURUSD for this test
-        ric = "EURUSD"
+        # We only care about INTERESTingProduct for this test
+        ric = "INTERESTingProduct"
         if ric not in self.products or ric not in market.quotes:
             # Not enough data to trade
             return
