@@ -1,18 +1,28 @@
 # ===================================================================
-#               Quant Competition - Add Participant Script
+#               Quant Competition - Add Participant Script
 # ===================================================================
-# This script automates creating a new participant:
-# 1. Generates a random Participant ID.
-# 2. Creates an IAM user.
-# 3. Creates and attaches a restrictive S3 policy for that user.
-# 4. Generates AWS access keys.
-# 5. Outputs the .env file contents.
+# This version captures all output (stdout and stderr) and checks
+# the exit code of each AWS command to provide real error messages
+# and correctly parse JSON output.
 # ===================================================================
 
 # --- CONFIGURATION (UPDATE THESE) ---
-$SubmissionsBucket = "comp-submission-bucket"
-$AwsRegion = "eu-central-1"
+$SubmissionsBucket = "comp-submission-bucket" # <-- !! UPDATE THIS !!
+$AwsRegion = "eu-central-1" # <-- !! UPDATE THIS !!
 # ------------------------------------
+
+# Helper function to stop the script on failure
+Function Stop-OnError($CommandName, $AwsOutput) {
+  Write-Host "------------------------------------------------------" -ForegroundColor Red
+  Write-Error "ERROR: The command '$CommandName' failed."
+  # Convert the output (which might be an array of lines) to a single string
+  $ErrorString = $AwsOutput | Out-String
+  Write-Error "AWS Response: $ErrorString"
+  Write-Error "Aborting script. Please fix the IAM permissions."
+  Write-Host "------------------------------------------------------" -ForegroundColor Red
+  # Exit the script
+  exit 1
+}
 
 # 1. Generate a random Participant ID
 $RandomString = -join (Get-Random -Count 8 -InputObject ([char[]]([char]'a'..[char]'z' + [char]'0'..[char]'9')))
@@ -23,46 +33,71 @@ $PolicyName = "QuantCompPolicy-$ParticipantId"
 Write-Host "Creating new participant: $ParticipantId" -ForegroundColor Cyan
 
 # 2. Create the IAM user
-Write-Host "Creating IAM user: $UserName"
-aws iam create-user --user-name $UserName
+Write-Host "Attempting to create user: $UserName"
+$UserOutput = aws iam create-user --user-name $UserName --output json 2>&1
 
-If (-Not $?) { Write-Error "Failed to create IAM user. Aborting."; return }
+if ($LASTEXITCODE -eq 0) {
+  Write-Host "Command successful. Parsing JSON output..."
+  $UserObject = $UserOutput | Out-String | ConvertFrom-Json
+  Write-Host "Successfully created user!"
+  Write-Host "User ARN: $($UserObject.User.Arn)"
+  # We need the UserObject for later, so we keep it.
+} else {
+  # The command failed. Call our helper function.
+  Stop-OnError "aws iam create-user" $UserOutput
+}
 
 # 3. Create the S3 policy
 $PolicyDocument = @"
 {
   "Version": "2012-10-17",
   "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::$SubmissionsBucket/$ParticipantId/*"
-    }
+  {
+    "Effect": "Allow",
+    "Action": "s3:PutObject",
+    "Resource": "arn:aws:s3:::$SubmissionsBucket/$ParticipantId/*"
+  }
   ]
 }
 "@
 
 Write-Host "Creating IAM policy: $PolicyName"
-$PolicyArn = aws iam create-policy `
-    --policy-name $PolicyName `
-    --policy-document $PolicyDocument | ConvertFrom-Json | Select-Object -ExpandProperty Policy | Select-Object -ExpandProperty Arn
+# Capture all output, including errors
+$PolicyOutput = aws iam create-policy --policy-name $PolicyName --policy-document $PolicyDocument --output json 2>&1 # <-- Added --output json
 
-If (-Not $?) { Write-Error "Failed to create IAM policy. Aborting."; return }
+If ($LASTEXITCODE -eq 0) {
+    Write-Host "Command successful. Parsing JSON output..."
+    # If the command succeeded, $PolicyOutput is a JSON string. Now we convert it.
+    $PolicyObject = $PolicyOutput | Out-String | ConvertFrom-Json
+    $PolicyArn = $PolicyObject.Policy.Arn
+} Else {
+  # This will now print the AccessDenied error cleanly.
+  Stop-OnError "aws iam create-policy" $PolicyOutput
+}
 
 # 4. Attach the policy to the user
 Write-Host "Attaching policy to user..."
-aws iam attach-user-policy `
-    --user-name $UserName `
-    --policy-arn $PolicyArn
-
-If (-Not $?) { Write-Error "Failed to attach policy. Aborting."; return }
+# This command doesn't return JSON, so we just check for errors.
+$AttachOutput = aws iam attach-user-policy --user-name $UserName --policy-arn $PolicyArn --output json 2>&1
+If ($LASTEXITCODE -ne 0) {
+  # Our updated Stop-OnError function will handle printing the error.
+  Stop-OnError "aws iam attach-user-policy" $AttachOutput
+}
 
 # 5. Generate an access key
 Write-Host "Creating access key..."
-$KeyOutput = aws iam create-access-key --user-name $UserName | ConvertFrom-Json
+# Capture all output, including errors
+$KeyOutput = aws iam create-access-key --user-name $UserName --output json 2>&1
 
-$AccessKeyId = $KeyOutput.AccessKey.AccessKeyId
-$SecretAccessKey = $KeyOutput.AccessKey.SecretAccessKey
+If ($LASTEXITCODE -eq 0) {
+    Write-Host "Command successful. Parsing JSON output..."
+    # If the command succeeded, $KeyOutput is a JSON string.
+    $KeyObject = $KeyOutput | Out-String | ConvertFrom-Json
+    $AccessKeyId = $KeyObject.AccessKey.AccessKeyId
+    $SecretAccessKey = $KeyObject.AccessKey.SecretAccessKey
+} Else {
+Stop-OnError "aws iam create-access-key" $KeyOutput
+}
 
 # 6. Print the results
 Write-Host "------------------------------------------------------" -ForegroundColor Green
@@ -76,5 +111,5 @@ Write-Host "SUBMISSIONS_BUCKET=$SubmissionsBucket"
 Write-Host "PARTICIPANT_ID=$ParticipantId"
 Write-Host "AWS_ACCESS_KEY_ID=$AccessKeyId"
 Write-Host "AWS_SECRET_ACCESS_KEY=$SecretAccessKey"
-Write-Host "--- END .env FILE ---" -ForegroundColor White
-Write-Host "------------------------------------------------------"
+Write-Host "--- END .env FILE ---"
+
