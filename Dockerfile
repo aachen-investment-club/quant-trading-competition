@@ -8,8 +8,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # system deps for building wheels (xgboost/lightgbm), tzdata for pandas
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    cmake \
     curl ca-certificates \
     git \
+    libgomp1 \
     tzdata \
  && rm -rf /var/lib/apt/lists/*
 
@@ -24,7 +26,9 @@ COPY . .
 # Jupyter port
 EXPOSE 8888
 
-# Provide a simple CLI: `submit` calls the Python submit tool from the project root
-# (WORKDIR is /usr/src/app, which contains tools/submit.py)
+# Provide simple CLIs inside the image:
+#   submit   -> python tools/submit.py
+#   local-eval -> python src/local_eval.py (defaults to repo data path)
 RUN printf '#!/bin/sh\nset -e\nexec python tools/submit.py "$@"\n' > /usr/local/bin/submit \
-    && chmod +x /usr/local/bin/submit
+    && printf '#!/bin/sh\nset -e\n[ "$#" -gt 0 ] || set -- submission/submission.py\nexec python src/local_eval.py "$@"\n' > /usr/local/bin/local-eval \
+    && chmod +x /usr/local/bin/submit /usr/local/bin/local-eval

@@ -21,6 +21,7 @@ This guide details the setup and operation of the competition infrastructure. Th
 * **Terraform** (>= 1.2).
 * **AWS CLI v2**.
 * **Python 3.10+** (for local scripts).
+* **Docker** (optional, to use the bundled helper image that contains all Python dependencies and CLI shortcuts).
 
 ## 3. Infrastructure Setup (Terraform)
 
@@ -116,6 +117,12 @@ Provide each participant with:
 ```bash
 python tools/submit.py
 ```
+Using the Docker helper image instead:
+```bash
+docker build -t trading-comp-env .
+docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env submit
+docker run --rm -v "${PWD}:/usr/src/app" trading-comp-env local-eval
+```
 4.  Check the logs in **CloudWatch**: Go to Log Groups \> `/aws/lambda/trading-comp-evaluator-lambda` to see the execution output, score, or any errors.
 
 ### 5.2 Viewing the Leaderboard
@@ -151,4 +158,3 @@ cd infra
 terraform destroy
 
 ```
-

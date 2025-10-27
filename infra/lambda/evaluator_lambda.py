@@ -254,40 +254,160 @@ def lambda_handler(event, context):
     test_bucket        = os.environ['TESTDATA_BUCKET']
     test_key           = os.environ['TESTDATA_KEY']
     ddb_table_name     = os.environ['DDB_TABLE']
-    universe           = os.environ.get('UNIVERSE', 'EURUSD,GBPUSD,USDJPY').split(',')
+    universe           = os.environ.get('UNIVERSE', '').split(',') # Keep default blank or specific
     competition_id     = os.environ.get('COMPETITION_ID', 'default-comp')
     
     table = ddb.Table(ddb_table_name)
 
-    for record in event.get('Records', []):
-        if record.get('eventSource') != 'aws:s3':
-            continue
-        key = record['s3']['object']['key']
-        if not key.endswith('submission.py'):
-            continue
-        parts = key.split('/')
-        if len(parts) < 3:
-            continue
+    submissions_to_process = []
+
+    # --- NEW: Check event source ---
+    if 'Records' in event and event['Records'] and 'eventSource' in event['Records'][0]:
+        event_source = event['Records'][0]['eventSource']
         
-        participant_id = parts[0]
-        submission_id  = parts[1]
+        # Case 1: Triggered by S3 (New Submission)
+        if event_source == 'aws:s3':
+            print("Triggered by S3 submission event.")
+            for record in event.get('Records', []):
+                try:
+                    key = record['s3']['object']['key']
+                    if not key.endswith('submission.py'):
+                        continue
+                    parts = key.split('/')
+                    if len(parts) < 3:
+                        continue
+                    
+                    participant_id = parts[0]
+                    submission_id  = parts[1]
+                    s3_path = f"s3://{submissions_bucket}/{key}" # For logging/reference
+                    
+                    submissions_to_process.append({
+                        'participant_id': participant_id,
+                        'submission_id': submission_id,
+                        's3_key': key,
+                        'source': 's3'
+                    })
+                except Exception as e:
+                    print(f"Error parsing S3 record: {record}. Error: {e}")
 
+        # Case 2: Triggered by SQS (Re-evaluation)
+        elif event_source == 'aws:sqs':
+            print("Triggered by SQS re-evaluation event.")
+            for record in event.get('Records', []):
+                try:
+                    message_body = json.loads(record['body'])
+                    participant_id = message_body['participant_id']
+                    submission_id = message_body['submission_id']
+                    
+                    # Construct the S3 key based on convention
+                    s3_key = f"{participant_id}/{submission_id}/submission.py"
+                    
+                    submissions_to_process.append({
+                        'participant_id': participant_id,
+                        'submission_id': submission_id,
+                        's3_key': s3_key,
+                        'source': 'sqs',
+                        'receipt_handle': record.get('receiptHandle') # Needed to delete message later
+                    })
+                except Exception as e:
+                     print(f"Error parsing SQS record: {record}. Error: {e}")
+                     # Optionally, decide if you want to skip or raise
+
+        else:
+            print(f"Warning: Unrecognized event source: {event_source}")
+            return {'statusCode': 400, 'body': 'Unrecognized event source'}
+
+    else:
+         # Handle potential direct invocation or other formats if needed
+        print("Warning: Event format not recognized as S3 or SQS.")
+        # Attempt to parse as direct invocation if necessary, otherwise return error
+        # Example: if 'participant_id' in event and 'submission_id' in event: ...
+        return {'statusCode': 400, 'body': 'Unrecognized event format'}
+
+
+    # --- Process the identified submissions ---
+    success_count = 0
+    failure_count = 0
+    
+    for sub_info in submissions_to_process:
+        participant_id = sub_info['participant_id']
+        submission_id = sub_info['submission_id']
+        s3_key = sub_info['s3_key']
+        
         local_path = f"/tmp/{participant_id}_{submission_id}_submission.py"
-        s3.download_file(submissions_bucket, key, local_path)
-
+        
         try:
+            print(f"Processing submission: p={participant_id}, s={submission_id}")
+            s3.download_file(submissions_bucket, s3_key, local_path)
+
             evaluate_submission(
-                local_path, table, 
-                participant_id, submission_id, competition_id, 
-                universe, test_bucket, test_key
+                py_path=local_path,
+                table=table,
+                participant_id=participant_id,
+                submission_id=submission_id,
+                competition_id=competition_id,
+                universe=universe,
+                test_bucket=test_bucket,
+                test_key=test_key
+                # cash parameter defaults to 100000.0
             )
+            print(f"Successfully evaluated: p={participant_id}, s={submission_id}")
+            success_count += 1
+
+            # If triggered by SQS, delete the message upon success
+            if sub_info['source'] == 'sqs' and sub_info.get('receipt_handle'):
+                 try:
+                     sqs_client = boto3.client('sqs')
+                     sqs_queue_url = context.invoked_function_arn.replace(context.function_name, '').replace('function', 'queue').replace('arn:aws:lambda', 'https://sqs').replace(':','/') # Infer queue URL (might need adjustment)
+                     # Or get queue URL from environment if passed
+                     # sqs_queue_url = os.environ['SQS_QUEUE_URL'] 
+                     
+                     # Need to get the actual queue URL the trigger is associated with
+                     event_source_arn = next((m['eventSourceARN'] for m in context.event_source_mappings if m['eventSourceARN'].startswith('arn:aws:sqs')), None)
+                     if event_source_arn:
+                         # Extract queue name and construct URL (this depends on region/account)
+                         # Example: Construct URL based on ARN parts
+                         # This part is tricky and might require passing the queue URL as an env var
+                         # For now, let's assume you pass SQS_QUEUE_URL to evaluator too.
+                         sqs_eval_queue_url = os.environ.get('SQS_QUEUE_URL_FOR_EVALUATOR') # Needs to be added to TF
+                         if sqs_eval_queue_url:
+                             sqs_client.delete_message(
+                                 QueueUrl=sqs_eval_queue_url,
+                                 ReceiptHandle=sub_info['receipt_handle']
+                             )
+                             print(f"Deleted SQS message for {participant_id}/{submission_id}")
+                         else:
+                             print("Warning: SQS Queue URL for evaluator not configured. Cannot delete message.")
+                     else:
+                        print("Warning: Could not determine SQS event source ARN. Cannot delete message.")
+
+                 except Exception as sqs_e:
+                     print(f"Error deleting SQS message for {participant_id}/{submission_id}: {sqs_e}")
+
+
         except Exception as e:
-            table.put_item(Item={
-                'participant_id': participant_id,
-                'submission_id':  submission_id,
-                'competition_id': competition_id,
-                'score':          Decimal('-999'),
-                'error':          str(e)[:500],
-                'timestep':      int(time.time())
-            })
-    return {'ok': True}
+            print(f"ERROR evaluating submission p={participant_id}, s={submission_id}: {e}")
+            traceback.print_exc() # Print full traceback to CloudWatch
+            failure_count += 1
+            # Write error record to DynamoDB
+            try:
+                table.put_item(Item={
+                    'participant_id': participant_id,
+                    'submission_id':  submission_id,
+                    'competition_id': competition_id,
+                    'score':          Decimal('-999'), # Indicate error
+                    'error':          str(e)[:500],
+                    'timestamp':      int(time.time())
+                })
+            except Exception as ddb_e:
+                 print(f"ERROR writing error record to DynamoDB for p={participant_id}, s={submission_id}: {ddb_e}")
+            # Do NOT delete SQS message on failure, let it retry or go to DLQ
+
+        finally:
+            # Clean up downloaded file
+            if os.path.exists(local_path):
+                os.remove(local_path)
+
+    print(f"Processing complete. Success: {success_count}, Failures: {failure_count}")
+    # Return structure might vary depending on source, but OK is generally fine
+    return {'ok': True, 'processed': success_count, 'failed': failure_count}

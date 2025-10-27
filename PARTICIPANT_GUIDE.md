@@ -146,11 +146,10 @@ def build_trader(universe: list[str]) -> MyTrader:
     SUBMISSION_ID=my-first-try python tools/submit.py
     ```
 
-    ### Alternative: submit from inside Docker
-   The image also provides a `submit` shortcut which calls the same script:
+    ### Alternative: use the Docker helper image
+   The repository's Docker image packages all Python dependencies and adds two helper commands (`submit` and `local-eval`). Build it once from the project root, then run submissions or local evaluations without installing anything locally:
    ```bash
-   docker run --rm -it   -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION   -e SUBMISSIONS_BUCKET -e PARTICIPANT_ID   -v "$(pwd):/usr/src/app" trading-comp-env submit
-
+   docker build -t trading-comp-env .
    docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env submit
    ```
 
@@ -172,6 +171,12 @@ You can test your `submission.py` file locally using the exact same evaluation l
     ```bash
     # Run evaluation using data/comp_data.csv and submission/submission.py
     python local_eval.py submission/submission.py
+    ```
+
+    Using the Docker helper image (defaults to `submission/submission.py` if you omit the argument):
+
+    ```bash
+    docker run --rm -v "${PWD}:/usr/src/app" trading-comp-env local-eval
     ```
 
 4.  **Check Output:** The script will:
