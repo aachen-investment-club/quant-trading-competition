@@ -69,7 +69,7 @@ class TestTrader:
         has_position = ric in portfolio.positions
 
         # --- Entry Logic ---
-        if not has_position and price > 1.1:
+        if not has_position and price < 1.1:
             print(f"Price {price} > 1.1. Entering position.")
             try:
                 # Create a new position object
