@@ -239,6 +239,7 @@ resource "aws_lambda_function" "evaluator" {
       TESTDATA_KEY       = var.testdata_key
       DDB_TABLE          = aws_dynamodb_table.scores.name
       COMPETITION_ID     = var.competition_id
+      SQS_QUEUE_URL_FOR_EVALUATOR = aws_sqs_queue.reevaluation_queue.id
     }
   }
 }

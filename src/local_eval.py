@@ -20,6 +20,7 @@ import pandas as pd
 import csv
 import traceback
 from collections import defaultdict
+from src.Engine import calculate_sharpe_ratio # Import the helper
 
 # --- Assumes your local backtest code is in the 'src' directory ---
 project_root = os.path.dirname(os.path.abspath(__file__))
@@ -215,9 +216,16 @@ if __name__ == "__main__":
         print("--------------------------------------------------\n")
         sys.exit(1)
 
-    # 4. Calculate and print metrics
-    engine.calculate_metrics() # Uses default periods_per_year=252
+    
+    
+    final_nav = engine.portfolio.nav()
+    pnl = final_nav - engine.initial_cash
+    sharpe = calculate_sharpe_ratio(engine.nav_history) # Pass the nav_history
 
+    print("\n--- Local Evaluation Metrics ---")
+    print(f"Final NAV:         {final_nav:,.2f}")
+    print(f"Total PnL:         {pnl:,.2f}")
+    print(f"Annualized Sharpe: {sharpe:.4f}")
     # Optional: Save results
     # engine.save("./local_results")
 

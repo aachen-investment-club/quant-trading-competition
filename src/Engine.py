@@ -9,7 +9,6 @@ import traceback
 # --- Use relative imports if running scripts from parent dir ---
 from .pricing.Portfolio import Portfolio
 from .pricing.Market import Market
-# --- Removed Datastream/EODSource imports ---
 
 # --- Helper function copied from evaluator_lambda.py ---
 def calculate_sharpe_ratio(nav_history, periods_per_year=252):
