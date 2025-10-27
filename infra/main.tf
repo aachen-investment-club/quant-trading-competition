@@ -15,7 +15,7 @@ variable "testdata_bucket_name" {
 }
 variable "testdata_key" {
   type    = string
-  default = "hidden/comp_data.csv"
+  default = "hidden/train1.csv"
 }
 variable "lambda_timeout" {
   type = number
@@ -179,7 +179,7 @@ data "aws_iam_policy_document" "lambda_policy" {
     effect    = "Allow"
     actions   = ["s3:GetObject"]
     resources = [
-      "${local.testdata_bucket_arn}/${var.testdata_key}"
+      "${local.testdata_bucket_arn}/${split("/", var.testdata_key)[0]}/*"
     ]
   }
 
@@ -193,7 +193,10 @@ data "aws_iam_policy_document" "lambda_policy" {
   statement {
     sid     = "DDBWriteScores"
     effect  = "Allow"
-    actions = ["dynamodb:PutItem"]
+    actions = [
+      "dynamodb:PutItem",
+      "dynamodb:GetItem"
+    ]
     resources = [
       aws_dynamodb_table.scores.arn,
       # CHANGED: Added permission to write to the GSI
@@ -306,7 +309,8 @@ data "aws_iam_policy_document" "orchestrator_lambda_policy" {
     effect = "Allow"
     actions = [
       "dynamodb:Query",
-      "dynamodb:Scan" # Scan might be needed to get all participant IDs initially
+      "dynamodb:Scan",
+      "dynamodb:PutItem"
     ]
     resources = [
       aws_dynamodb_table.scores.arn,
@@ -370,8 +374,8 @@ resource "aws_s3_bucket_notification" "testdata_notify_orchestrator" {
     lambda_function_arn = aws_lambda_function.orchestrator.arn
     events              = ["s3:ObjectCreated:*"]
     # Filter specifically for your test data file
-    filter_prefix = split("/", var.testdata_key)[0] # e.g., "hidden"
-    filter_suffix = split("/", var.testdata_key)[1] # e.g., "test_data.csv"
+    filter_prefix = split("/", var.testdata_key)[0]
+    filter_suffix = ".csv"
   }
 
   depends_on = [aws_lambda_permission.allow_testdata_s3_invoke_orchestrator]

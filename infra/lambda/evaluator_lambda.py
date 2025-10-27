@@ -1,3 +1,4 @@
+import json
 import os, sys, csv, io, time, importlib.util, types, traceback
 import boto3
 from decimal import Decimal
@@ -101,7 +102,7 @@ class Portfolio():
             exit_value = p.mark_to_market(self.market) # Fallback
 
         self.cash += exit_value
-        self.tradelog[id] = {"timestep": self.market.quotes[id]['timestep'], "quantity": p.quantity, "price": p.price}
+        self.tradelog[id].append({"timestep": self.market.quotes[id]['timestep'], "quantity": -p.quantity, "price": p.price})
         self.positions.pop(id)
 
 # Expose expected modules so participant imports work
@@ -273,41 +274,64 @@ def evaluate_submission(py_path, table, participant_id, submission_id, competiti
 
 def lambda_handler(event, context):
     submissions_bucket = os.environ['SUBMISSIONS_BUCKET']
-    test_bucket        = os.environ['TESTDATA_BUCKET']
-    test_key           = os.environ['TESTDATA_KEY']
+    test_bucket        = os.environ['TESTDATA_BUCKET'] # Default bucket
+    test_key           = os.environ.get('TESTDATA_KEY') # Default/Fallback key
     ddb_table_name     = os.environ['DDB_TABLE']
-    universe           = os.environ.get('UNIVERSE', '').split(',') # Keep default blank or specific
+    universe           = os.environ.get('UNIVERSE', '').split(',') 
     competition_id     = os.environ.get('COMPETITION_ID', 'default-comp')
-    
-    table = ddb.Table(ddb_table_name)
 
+    table = ddb.Table(ddb_table_name)
     submissions_to_process = []
 
-    # --- NEW: Check event source ---
     if 'Records' in event and event['Records'] and 'eventSource' in event['Records'][0]:
         event_source = event['Records'][0]['eventSource']
-        
+
         # Case 1: Triggered by S3 (New Submission)
         if event_source == 'aws:s3':
             print("Triggered by S3 submission event.")
+
+            # --- NEW: Get active test key from DDB for S3 triggers ---
+            eval_test_key = test_key     # Start with fallback
+            eval_test_bucket = test_bucket # Start with fallback
+            try:
+                response = table.get_item(Key={'participant_id': 'SYSTEM_CONFIG', 'submission_id': 'ACTIVE_TEST_KEY'})
+                config = response.get('Item')
+                if config:
+                    eval_test_key = config['active_test_key']
+                    eval_test_bucket = config['active_test_bucket']
+                    print(f"Using active test key from DDB: {eval_test_key}")
+                else:
+                    print("No active test key in DDB, using fallback env var.")
+                    if not test_key: raise ValueError("No active key in DDB and TESTDATA_KEY env var not set.")
+            except Exception as e:
+                print(f"Error fetching active key from DDB, using fallback: {e}")
+                if not test_key: raise ValueError(f"DDB fetch failed and TESTDATA_KEY env var not set: {e}")
+            # --- End new block ---
+
             for record in event.get('Records', []):
                 try:
                     key = record['s3']['object']['key']
+
+                    # --- THIS IS THE MISSING LOGIC ---
                     if not key.endswith('submission.py'):
-                        continue
+                        print(f"Skipping key (does not end with submission.py): {key}")
+                        continue # Skip this record
                     parts = key.split('/')
                     if len(parts) < 3:
-                        continue
-                    
+                        print(f"Skipping key (invalid format): {key}")
+                        continue # Skip this record
+
                     participant_id = parts[0]
                     submission_id  = parts[1]
-                    s3_path = f"s3://{submissions_bucket}/{key}" # For logging/reference
-                    
+                    # --- END OF MISSING LOGIC ---
+
                     submissions_to_process.append({
                         'participant_id': participant_id,
                         'submission_id': submission_id,
                         's3_key': key,
-                        'source': 's3'
+                        'source': 's3',
+                        'test_data_key': eval_test_key,
+                        'test_data_bucket': eval_test_bucket
                     })
                 except Exception as e:
                     print(f"Error parsing S3 record: {record}. Error: {e}")
@@ -320,20 +344,24 @@ def lambda_handler(event, context):
                     message_body = json.loads(record['body'])
                     participant_id = message_body['participant_id']
                     submission_id = message_body['submission_id']
-                    
-                    # Construct the S3 key based on convention
+
+                    # --- NEW: Get test key from SQS message ---
+                    eval_test_key = message_body['test_data_key']
+                    eval_test_bucket = message_body['test_data_bucket']
+
                     s3_key = f"{participant_id}/{submission_id}/submission.py"
-                    
+
                     submissions_to_process.append({
                         'participant_id': participant_id,
                         'submission_id': submission_id,
                         's3_key': s3_key,
                         'source': 'sqs',
-                        'receipt_handle': record.get('receiptHandle') # Needed to delete message later
+                        'receipt_handle': record.get('receiptHandle'),
+                        'test_data_key': eval_test_key,      # <-- ADD
+                        'test_data_bucket': eval_test_bucket # <-- ADD
                     })
                 except Exception as e:
                      print(f"Error parsing SQS record: {record}. Error: {e}")
-                     # Optionally, decide if you want to skip or raise
 
         else:
             print(f"Warning: Unrecognized event source: {event_source}")
@@ -350,16 +378,22 @@ def lambda_handler(event, context):
     # --- Process the identified submissions ---
     success_count = 0
     failure_count = 0
-    
+
     for sub_info in submissions_to_process:
         participant_id = sub_info['participant_id']
         submission_id = sub_info['submission_id']
         s3_key = sub_info['s3_key']
-        
+
+        # --- MODIFIED: Use dynamic test keys ---
+        eval_test_key = sub_info['test_data_key']
+        eval_test_bucket = sub_info['test_data_bucket']
+
         local_path = f"/tmp/{participant_id}_{submission_id}_submission.py"
-        
+
         try:
             print(f"Processing submission: p={participant_id}, s={submission_id}")
+            print(f"Using test file: s3://{eval_test_bucket}/{eval_test_key}")
+
             s3.download_file(submissions_bucket, s3_key, local_path)
 
             evaluate_submission(
@@ -369,10 +403,10 @@ def lambda_handler(event, context):
                 submission_id=submission_id,
                 competition_id=competition_id,
                 universe=universe,
-                test_bucket=test_bucket,
-                test_key=test_key
-                # cash parameter defaults to 100000.0
+                test_bucket=eval_test_bucket, # <-- PASS DYNAMIC
+                test_key=eval_test_key        # <-- PASS DYNAMIC
             )
+
             print(f"Successfully evaluated: p={participant_id}, s={submission_id}")
             success_count += 1
 

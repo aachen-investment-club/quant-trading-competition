@@ -182,7 +182,7 @@ def load_submission(submission_path: str):
 # --- Main Execution Logic ---
 if __name__ == "__main__":
     # --- FIXED DATA PATH ---
-    data_path = os.path.join(project_root, "data", "comp_data.csv")
+    data_path = os.path.join(os.path.dirname(project_root), "data", "comp_data.csv")
 
     if len(sys.argv) != 2: # Only submission path needed now
         print("Usage: python local_eval.py <path_to_submission_py>")

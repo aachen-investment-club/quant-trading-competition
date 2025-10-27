@@ -37,7 +37,7 @@ This guide details the setup and operation of the competition infrastructure. Th
     competition_id          = "quant-comp-2025" 
     
     # Path to the test data you will upload
-    testdata_key            = "hidden/comp_data.csv"
+    testdata_key            = "hidden/"
 
     ```
 
@@ -149,8 +149,8 @@ When the competition is over, destroy the infrastructure from the `infra/` direc
 ```bash
 # Note: You must manually empty the S3 buckets first,
 # or Terraform will fail.
-aws s3 rb s3://your-comp-submissions-unique --force
-aws s3 rb s3://your-comp-testdata-unique --force
+aws s3 rb s3://comp-submission-bucket --force
+aws s3 rb s3://comp-eval-bucket --force
 
 cd infra
 terraform destroy

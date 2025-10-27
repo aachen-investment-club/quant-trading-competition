@@ -6,4 +6,4 @@ testdata_bucket_name    = "comp-eval-bucket"
 competition_id          = "quant-comp-2025" 
 
 # Path to the test data you will upload
-testdata_key            = "hidden/comp_data.csv"
+testdata_key            = "hidden/train1.csv"
