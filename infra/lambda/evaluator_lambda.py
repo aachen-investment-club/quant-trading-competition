@@ -1,7 +1,6 @@
 import os, sys, csv, io, time, importlib.util, types, traceback
 import boto3
 from decimal import Decimal
-# CHANGED: Added numpy. This MUST be available in your Lambda deployment (e.g., via a Layer).
 import numpy as np
 import pandas as pd
 
@@ -153,7 +152,6 @@ def iter_quotes_from_csv_wide(csv_bytes, universe):
         if batch:
             yield batch
 
-# CHANGED: Added Sharpe Ratio calculation
 def calculate_sharpe_ratio(nav_history, periods_per_year=252):
     """
     Calculates the annualized Sharpe ratio from a list of NAVs.
@@ -181,7 +179,6 @@ def calculate_sharpe_ratio(nav_history, periods_per_year=252):
 
     sharpe = annualized_mean_return / annualized_std_dev
     return float(sharpe)
-
 
 def evaluate_submission(py_path, table, participant_id, submission_id, competition_id, universe, test_bucket, test_key, cash=100000.0):
     # Load participant submission
