@@ -1,7 +1,7 @@
 .env
 # HOST_GUIDE.md
 # /infra
-/data
+/data/*
 
 __pycache__
 *.pyc
@@ -28,5 +28,4 @@ override.tf.json
 *.env
 .env
 /python
-/data/*
 *.zip
