@@ -70,7 +70,7 @@ def read_and_batch_csv_data(csv_path: str) -> tuple[list[str], list[list[dict]]]
                     # Structure matches what lambda CSV reader produces
                     quote = {
                         'id': row['product_id'],
-                        'timestamp': ts,
+                        'timestep': ts,
                         'price': price,
                         'data': {'Price Close': price}
                     }
@@ -84,19 +84,19 @@ def read_and_batch_csv_data(csv_path: str) -> tuple[list[str], list[list[dict]]]
                 all_quotes.extend(data_by_product[ric])
 
             # Sort all quotes by timestamp first, then by id
-            all_quotes.sort(key=lambda q: (q['timestamp'], q['id']))
+            all_quotes.sort(key=lambda q: (q['timestep'], q['id']))
 
             batched_data = []
             current_batch = []
             last_ts = None
             for quote in all_quotes:
-                ts = quote['timestamp']
+                ts = quote['timestep']
                 if last_ts is None: last_ts = ts
 
                 if ts != last_ts:
                     # Add clock tick to previous batch before starting new one
                     if current_batch:
-                         current_batch.append({'id': 'Clock', 'timestamp': last_ts})
+                         current_batch.append({'id': 'Clock', 'timestep': last_ts})
                          batched_data.append(current_batch)
                     current_batch = [quote] # Start new batch
                     last_ts = ts
@@ -104,7 +104,7 @@ def read_and_batch_csv_data(csv_path: str) -> tuple[list[str], list[list[dict]]]
                     current_batch.append(quote)
 
             if current_batch: # Add the last batch
-                 current_batch.append({'id': 'Clock', 'timestamp': last_ts})
+                 current_batch.append({'id': 'Clock', 'timestep': last_ts})
                  batched_data.append(current_batch)
 
         else: # WIDE FORMAT
@@ -121,7 +121,7 @@ def read_and_batch_csv_data(csv_path: str) -> tuple[list[str], list[list[dict]]]
                             # Structure matches what lambda CSV reader produces
                             quote = {
                                 'id': ric,
-                                'timestamp': ts,
+                                'timestep': ts,
                                 'price': price,
                                 'data': {'Price Close': price}
                             }
@@ -130,7 +130,7 @@ def read_and_batch_csv_data(csv_path: str) -> tuple[list[str], list[list[dict]]]
                              print(f"Skipping value for {ric} due to error: {e} in row: {row}")
                 if current_batch: # Add batch only if it has data
                     # Add clock tick
-                    current_batch.append({'id': 'Clock', 'timestamp': ts})
+                    current_batch.append({'id': 'Clock', 'timestep': ts})
                     batched_data.append(current_batch)
 
         print(f"Determined Universe: {universe}")
@@ -182,7 +182,7 @@ def load_submission(submission_path: str):
 # --- Main Execution Logic ---
 if __name__ == "__main__":
     # --- FIXED DATA PATH ---
-    data_path = os.path.join(os.path.dirname(project_root), "data", "comp_data.csv")
+    data_path = os.path.join(os.path.dirname(project_root), "data", "train1.csv")
 
     if len(sys.argv) != 2: # Only submission path needed now
         print("Usage: python local_eval.py <path_to_submission_py>")

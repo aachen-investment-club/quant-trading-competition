@@ -55,15 +55,40 @@ class Engine():
 
         self.nav_history: list[float] = [initial_cash]
 
-    # --- MODIFIED run ---
     def run(self) -> None:
         if not hasattr(self.strategy, 'on_quote'):
              print("ERROR: The trader object built by build_trader() does not have an 'on_quote' method.")
              return
 
         print("Starting local backtest...")
+        
         # --- Iterate directly through pre-processed batches ---
-        with tqdm(total=self.total_data_points) as pbar:
+        with tqdm(total=self.total_data_points, unit=" quotes") as pbar:
             for quote_batch in self.data_batches:
                 if not quote_batch: # Skip empty batches if any
                     continue
+                
+                # 1. Update market with all quotes in the batch
+                # (The batch includes quotes for all products at one timestamp)
+                for q in quote_batch:
+                    # Don't update pbar for the 'Clock' tick
+                    if q['id'] != 'Clock':
+                        self.market.update(q)
+                        pbar.update(1)
+
+                # 2. Call the trader's logic ONCE per batch
+                # This mimics the cloud lambda's event-driven approach
+                try:
+                    self.strategy.on_quote(self.market, self.portfolio)
+                except Exception as e:
+                    # Log errors locally to help debugging
+                    print(f"\n--- ERROR during on_quote ---")
+                    traceback.print_exc()
+                    print("--------------------------------\n")
+                    # Mimic the cloud's behavior of swallowing exceptions
+                    pass 
+                
+                # 3. Record NAV history after the batch
+                self.nav_history.append(self.portfolio.nav())
+
+        print("Backtest loop complete.")

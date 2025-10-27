@@ -256,10 +256,13 @@ def evaluate_submission(py_path, table, participant_id, submission_id, competiti
     # The 'score' will be the Sharpe Ratio, used for the GSI
     score = sharpe
 
+    evaluation_id = f"{submission_id}#{test_key}"
+
     item = {
         'participant_id': participant_id,
-        'submission_id':  submission_id,
+        'submission_id':  evaluation_id, # <-- Use the new unique ID as the Sort Key
         'competition_id': competition_id,
+        'original_submission_id': submission_id, # <-- Store the original ID for the orchestrator
         'score':          Decimal(str(round(score, 6))),
         'sharpe_ratio':   Decimal(str(round(sharpe, 6))),
         'pnl':            Decimal(str(round(pnl, 2))),

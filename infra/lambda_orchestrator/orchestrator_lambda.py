@@ -35,17 +35,17 @@ def get_all_participant_ids():
 
 def get_latest_submissions_by_participant():
     """
-    Scans the table and finds the latest submission_id for all
-    participants.
-    Returns: A dict of {participant_id: latest_submission_id}
+    Scans the table and finds the latest original_submission_id for all
+    participants based on the 'timestep' (submission time).
+    Returns: A dict of {participant_id: latest_original_submission_id}
     """
-    participant_submissions = {}
+    participant_submissions = {} # Will store {pid: (latest_timestamp, submission_id)}
     scan_kwargs = {}
     done = False
     start_key = None
     
-    # We must project (get) submission_id to find the latest one
-    projection = "participant_id, submission_id"
+    # We must project the new 'original_submission_id' and 'timestep'
+    projection = "participant_id, original_submission_id, submission_id, timestep"
 
     while not done:
         if start_key:
@@ -55,21 +55,34 @@ def get_latest_submissions_by_participant():
         
         for item in response.get('Items', []):
             pid = item.get('participant_id')
-            sid = item.get('submission_id')
             
+            # --- MODIFIED LOGIC ---
+            # Get the original submission ID. Fallback to submission_id for old items
+            # The 'timestep' is stored as a Decimal, must cast to int
+            try:
+                ts = int(item.get('timestep', 0))
+                # Use new 'original_submission_id' field, fallback to old 'submission_id'
+                sid = item.get('original_submission_id', item.get('submission_id')) 
+            except (ValueError, TypeError):
+                continue # Skip item if data is malformed
+
             # Skip non-participant items
             if not pid or pid == 'SYSTEM_CONFIG' or not sid:
                 continue
 
-            # Check if this submission is later than one we've already seen
-            if pid not in participant_submissions or sid > participant_submissions[pid]:
-                participant_submissions[pid] = sid
+            # Check if this submission is later (by timestamp) than one we've already seen
+            if pid not in participant_submissions or ts > participant_submissions[pid][0]:
+                participant_submissions[pid] = (ts, sid)
+            # --- END MODIFIED LOGIC ---
                 
         start_key = response.get('LastEvaluatedKey', None)
         done = start_key is None
         
     print(f"Found {len(participant_submissions)} unique participants.")
-    return participant_submissions
+    
+    # Convert {pid: (ts, sid)} to {pid: sid}
+    final_submissions = {pid: data[1] for pid, data in participant_submissions.items()}
+    return final_submissions
 
 def lambda_handler(event, context):
     print("Orchestrator triggered by test data update.")

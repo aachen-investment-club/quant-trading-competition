@@ -53,11 +53,14 @@ class Portfolio():
         if id not in self.positions.keys():
             raise Exception("Position not found")
         else:
-            exit_position = self.positions[id]
+            exit_position = self.positions.pop(id) # Pop the position
             self.cash +=  exit_position.mark_to_market(self.market)
-            self.tradelog[id] = {
+            
+            # --- FIX ---
+            # Append to the tradelog, don't replace it
+            # Log a negative quantity to show a sale
+            self.tradelog[id].append({
                 "timestep": self.market.quotes[id]['timestep'],
-                "quantity": exit_position.quantity,
+                "quantity": -exit_position.quantity, # Log negative quantity
                 "price": exit_position.price
-                }
-            self.positions.pop(id)
+                })
