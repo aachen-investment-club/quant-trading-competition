@@ -197,9 +197,31 @@ def evaluate_submission(py_path, table, participant_id, submission_id, competiti
     csv_bytes = buf.getvalue()
 
     # Try to detect format
-    header = csv_bytes.splitlines()[0].decode('utf-8')
-    use_long = 'id' in header.split(',')
-    iterator = iter_quotes_from_csv_long(csv_bytes, universe) if use_long else iter_quotes_from_csv_wide(csv_bytes, universe)
+    header_line = csv_bytes.splitlines()[0].decode('utf-8')
+    headers = [h.strip() for h in header_line.split(',')]
+    
+    use_long = 'id' in headers or 'product_id' in headers # Check for long format
+    
+    if use_long:
+        # For LONG format, we must read the file to find all unique IDs
+        print("Detecting universe from LONG format CSV...")
+        f_for_universe = io.StringIO(csv_bytes.decode('utf-8'))
+        reader = csv.DictReader(f_for_universe)
+        universe_set = set()
+        id_col = 'id' if 'id' in headers else 'product_id'
+        for row in reader:
+            if row.get(id_col):
+                universe_set.add(row[id_col])
+        universe = sorted(list(universe_set))
+        iterator = iter_quotes_from_csv_long(csv_bytes, universe)
+    else:
+        # For WIDE format, universe is the headers (minus time)
+        print("Detecting universe from WIDE format CSV...")
+        time_col = 'timestep' if 'timestep' in headers else 'timestamp'
+        universe = sorted([h for h in headers if h.lower() != time_col])
+        iterator = iter_quotes_from_csv_wide(csv_bytes, universe)
+        
+    print(f"Dynamically determined universe: {universe}")
 
     market = Market(universe)
     portfolio = Portfolio(cash=cash, market=market)

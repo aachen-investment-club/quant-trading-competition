@@ -17,10 +17,6 @@ variable "testdata_key" {
   type    = string
   default = "hidden/comp_data.csv"
 }
-variable "universe_csv" {
-  type    = string
-  default = "INTERESTingProduct,James_Fund_007"
-}
 variable "lambda_timeout" {
   type = number
   default = 900
@@ -242,7 +238,6 @@ resource "aws_lambda_function" "evaluator" {
       TESTDATA_BUCKET    = local.testdata_bucket_id
       TESTDATA_KEY       = var.testdata_key
       DDB_TABLE          = aws_dynamodb_table.scores.name
-      UNIVERSE           = var.universe_csv
       COMPETITION_ID     = var.competition_id
     }
   }
@@ -277,7 +272,7 @@ resource "aws_sqs_queue" "reevaluation_queue" {
   max_message_size          = 262144 # 256 KiB
   message_retention_seconds = 86400  # 1 day
   receive_wait_time_seconds = 10
-  # Consider adding visibility_timeout if needed
+  visibility_timeout_seconds = var.lambda_timeout
 }
 
 # --- Add IAM Role & Policy for Orchestrator Lambda ---

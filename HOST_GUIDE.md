@@ -38,9 +38,7 @@ This guide details the setup and operation of the competition infrastructure. Th
     
     # Path to the test data you will upload
     testdata_key            = "hidden/comp_data.csv"
-    
-    # Comma-separated list of product IDs in your test data
-    universe_csv            = "EURUSD,PRODUCT_B"
+
     ```
 
 2.  **Deploy Infrastructure**: Run Terraform from the `infra/` directory.
@@ -78,7 +76,7 @@ The evaluator Lambda requires **`numpy`** and **`pandas`** to calculate the Shar
 You must upload your hidden test data to the S3 bucket and key specified in your `terraform.tfvars`.
 
 ```bash
-aws s3 cp /path/to/your/local_comp_data.csv s3://your-comp-testdata-unique/hidden/comp_data.csv
+aws s3 cp data/comp_data.csv s3://comp-submission-bucket/hidden/comp_data.csv
 ```
 
 ### 4.3 Create Participant IAM Policies
