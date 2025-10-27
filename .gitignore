@@ -28,5 +28,5 @@ override.tf.json
 *.env
 .env
 /python
-/data
+/data/*
 *.zip
