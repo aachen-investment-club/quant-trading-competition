@@ -43,6 +43,14 @@ All local development and testing should be done using the provided Docker envir
     docker build -t trading-comp-env .
     ```
 
+3.  **Get the latest test data**:
+    From the root of the project, run the docker command. This downloads the latest train data file and stores it into /data in your root directory.
+
+    ```bash
+    docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env sync-data
+    ```
+
+
 You now have two main options for local development: data exploration with Jupyter or backtesting your `submission.py`.
 
 -----
