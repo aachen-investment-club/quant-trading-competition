@@ -14,7 +14,7 @@ This guide explains how to use the provided Docker environment to develop your s
 
 Your submission is run in a secure, event-driven AWS Lambda environment. The process is:
 
-1.  **Submission**: You upload a `submission/` folder containing your `submission.py` file.
+1.  **Submission**: You upload a `submission/` folder containing your `submission.py` file. ([see file](submission/submission.py))
 2.  **Factory Call**: The evaluator imports your `submission.py` and calls your factory function `build_trader(universe: list[str])`. This must return your trader object.
 3.  **Event Loop**: The evaluator reads a hidden test data file (like a CSV of prices) one step at a time. For each step (or "batch"), it calls your trader's primary method: `on_quote(market: Market, portfolio: Portfolio)`.
 4.  **Interface**: Your trader must interact with the provided `market` and `portfolio` objects to get prices and execute trades.
@@ -45,6 +45,24 @@ All local development and testing should be done using the provided Docker envir
 
     ```bash
     docker build -t trading-comp-env .
+    ```
+
+2.  **Get Credentials**: Your host will provide you with:
+
+    * `AWS_REGION`
+    * `AWS_ACCESS_KEY_ID`
+    * `AWS_SECRET_ACCESS_KEY`
+    * `SUBMISSIONS_BUCKET`
+    * `PARTICIPANT_ID`
+
+3.  **Create `.env` File**: Create a file named `.env` in the root of the `quant-trading-competition` directory. Paste your credentials into it.
+
+    ```
+    AWS_REGION=eu-central-1
+    SUBMISSIONS_BUCKET=your-comp-submissions-unique
+    PARTICIPANT_ID=your-unique-id
+    AWS_ACCESS_KEY_ID=...
+    AWS_SECRET_ACCESS_KEY=...
     ```
 
 3.  **Get the latest test data**:
@@ -78,12 +96,13 @@ To explore the data or experiment with models, you can run a Jupyter server insi
 3.  **Connect VS Code**:
 
       * In the terminal output from the previous step, **copy the URL** that includes the token (it looks like `http://127.0.0.1:8888/?token=...`).
-      * Create or open a Jupyter Notebook file (e.g., notebooks/my_analysis.ipynb).
+      * Create or open a Jupyter Notebook file (e.g., src/notebooks/data_exploration_template.ipynb).
       * In the top-right corner of the notebook, click the "Select Kernel" button.
       * From the dropdown, choose "Jupyter Server".
       * Select "Existing" from the next list.
       * Paste the full URL (with token) you copied from your terminal and press Enter.
     You can now run code in your notebook, and it will execute inside the Docker container with all the correct libraries.
+
 -----
 
 ## 4\. Local Backtest Evaluation
@@ -119,120 +138,25 @@ This allows you to iterate quickly and confirm your strategy behaves as expected
 
 -----
 
-## 5\. Your `submission.py` File (Example)
-
-Use this as a template for your `submission/submission.py`:
-
-```python
-# --- These imports are provided by the Lambda environment ---
-from pricing.Product import Product
-from pricing.Position import Position
-from pricing.Market import Market
-from pricing.Portfolio import Portfolio
-
-# --- 1. Define Your Product Class ---
-class MyFX(Product):
-    """A simple Product that gets its price from the market quotes."""
-    def __init__(self, id: str):
-        super().__init__(id)
-
-    def present_value(self, market: Market) -> float:
-        """Reads the 'price' from the quote provided by the evaluator."""
-        if self.id not in market.quotes:
-            return 0.0
-        return market.quotes[self.id]['price']
-
-# --- 2. Define Your Trader Class ---
-class MyTrader:
-    """A simple moving average crossover trader."""
-    def __init__(self, universe: list[str]):
-        self.products = {ric: MyFX(ric) for ric in universe}
-        
-        # Store price history
-        self.history = {ric: [] for ric in universe}
-        self.fast_ma = 5
-        self.slow_ma = 20
-        print(f"MyTrader initialized for {universe}")
-
-    def on_quote(self, market: Market, portfolio: Portfolio):
-        """This is called on every new batch of quotes."""
-        
-        ric = "PRODUCT_A" # Trade only one product for simplicity
-        if ric not in market.quotes:
-            return
-
-        # --- 1. Update Data ---
-        price = market.quotes[ric]['price']
-        self.history[ric].append(price)
-        if len(self.history[ric]) > self.slow_ma:
-            self.history[ric].pop(0) # Keep history bounded
-        else:
-            return # Not enough data to trade
-
-        # --- 2. Calculate Signals ---
-        fast = sum(self.history[ric][-self.fast_ma:]) / self.fast_ma
-        slow = sum(self.history[ric]) / len(self.history[ric])
-        
-        has_position = ric in portfolio.positions
-
-        # --- 3. Execute Trades ---
-        try:
-            # Go Long
-            if fast > slow and not has_position:
-                pos = Position(self.products[ric], quantity=100)
-                portfolio.enter(pos)
-                
-            # Go Flat
-            elif fast < slow and has_position:
-                portfolio.exit(ric)
-                
-        except Exception as e:
-            # Portfolio.enter/exit can fail (e.g., insufficient funds)
-            print(f"Trade Error: {e}")
-
-# --- 3. Define the Factory Function (REQUIRED) ---
-def build_trader(universe: list[str]) -> MyTrader:
-    """This function is called by the evaluator to get your trader."""
-    return MyTrader(universe)
-```
-
------
-
-## 6\. How to Submit
+## 5\. How to Submit
 
 The Docker image packages all dependencies and adds a helper command `submit`.
 
-1.  **Get Credentials**: Your host will provide you with:
+**Run Submission Script**: From the root directory, run the `submit` command via Docker. This will securely use your `.env` file and upload your `submission/` directory. Make sure the Docker Desktop program is running/open. 
+    
+```bash
+# For PowerShell
+docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env submit
 
-      * `AWS_REGION`
-      * `AWS_ACCESS_KEY_ID`
-      * `AWS_SECRET_ACCESS_KEY`
-      * `SUBMISSIONS_BUCKET`
-      * `PARTICIPANT_ID`
+# For macOS/Linux
+docker run --rm --env-file .env -v "$(pwd):/usr/src/app" trading-comp-env submit
+```
 
-2.  **Create `.env` File**: Create a file named `.env` in the root of the `quant-trading-competition` directory. Paste your credentials into it.
+You can see your result on this website: https://www.aachen-investment-club.de/teams/quant/leaderboard.
 
-    ```
-    AWS_REGION=eu-central-1
-    SUBMISSIONS_BUCKET=your-comp-submissions-unique
-    PARTICIPANT_ID=your-unique-id
-    AWS_ACCESS_KEY_ID=...
-    AWS_SECRET_ACCESS_KEY=...
-    ```
-
-3.  **Run Submission Script**: From the root directory, run the `submit` command via Docker. This will securely use your `.env` file and upload your `submission/` directory.
-    Make sure the Docker Desktop program is running/open. 
-    ```bash
-    # For PowerShell
-    docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env submit
-
-    # For macOS/Linux
-    docker run --rm --env-file .env -v "$(pwd):/usr/src/app" trading-comp-env submit
-    ```
-    You can see your result on this website: https://www.aachen-investment-club.de/teams/quant/leaderboard.
 -----
 
-## 7\. Rules & Guidelines
+## 6\. Rules & Guidelines
 
   * **File**: You must submit a single `submission/submission.py`.
   * **Timeout**: Your submission has **15 minutes** (900 seconds) to run. If it exceeds this, it will fail.

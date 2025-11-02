@@ -48,8 +48,8 @@ class TestTrader:
     def __init__(self, universe: list[str]):
         self.universe = universe
         self.products = {}
-        for ric in universe:
-            self.products[ric] = SimpleFX(ric)
+        for product_id in universe:
+            self.products[product_id] = SimpleFX(product_id)
             
         print(f"TestTrader initialized for universe: {universe}")
 
@@ -58,33 +58,31 @@ class TestTrader:
         This is the main event loop called by the evaluator.
         """
         # We only care about INTERESTingProduct for this test
-        ric = "INTERESTingProduct"
-        if ric not in self.products or ric not in market.quotes:
+        product_id = "INTERESTingProduct"
+        if product_id not in self.products or product_id not in market.quotes:
             # Not enough data to trade
             return
 
-        price = market.quotes[ric]['price']
+        price = market.quotes[product_id]['price']
         
         # Check if we already have a position
-        has_position = ric in portfolio.positions
+        has_position = product_id in portfolio.positions
 
         # --- Entry Logic ---
-        if not has_position and price < 1.1:
-            print(f"Price {price} > 1.1. Entering position.")
+        if not has_position and price < 3.0:
             try:
                 # Create a new position object
-                pos = Position(self.products[ric], quantity=100)
+                pos = Position(self.products[product_id], quantity=100)
                 # Enter the position
                 portfolio.enter(pos)
             except Exception as e:
                 print(f"Error entering position: {e}")
 
         # --- Exit Logic ---
-        elif has_position and price < 1.05:
-            print(f"Price {price} < 1.05. Exiting position.")
+        elif has_position and price > 4.0:
             try:
                 # Exit the position by its ID
-                portfolio.exit(ric)
+                portfolio.exit(product_id)
             except Exception as e:
                 print(f"Error exiting position: {e}")
 
