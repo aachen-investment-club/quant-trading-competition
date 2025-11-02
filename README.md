@@ -34,17 +34,21 @@ The `pricing` modules (`Product`, `Position`, `Market`, `Portfolio`) are **mocke
 
 ## 2\. Local Development Setup (Docker)
 
-All local development and testing should be done using the provided Docker environment. This ensures your code runs with the exact same dependencies as the cloud evaluator.
+All local development and testing should be done using the provided Docker environment. This ensures your code runs with the exact same dependencies as the cloud evaluator. As a code editor we recommend VS Code
+
+0.  **Install Docker and VS Code**
+    * Go to https://code.visualstudio.com/ to install VS Code.
+    * Go to https://www.docker.com/products/docker-desktop/ to install Docker Desktop. 
 
 1.  **Build the Docker Image**:
-    From the root of the project, run the build command. This reads the `Dockerfile`, installs all dependencies from `requirements.txt`, and sets up the helper commands.
+    Make sure the Docker Desktop program is running/open. From the root of the project, run the build command. This reads the `Dockerfile`, installs all dependencies from `requirements.txt`, and sets up the helper commands.
 
     ```bash
     docker build -t trading-comp-env .
     ```
 
 3.  **Get the latest test data**:
-    From the root of the project, run the docker command. This downloads the latest train data file and stores it into /data in your root directory.
+    Make sure the Docker Desktop program is running/open. From the root of the project, run the docker command. This downloads the latest train data file and stores it into /data in your root directory.
 
     ```bash
     # For PowerShell
@@ -66,7 +70,7 @@ To explore the data or experiment with models, you can run a Jupyter server insi
     Go the extensions tab on the left side and install the Jupyter extension from Microsoft.
 2.  **Run the Jupyter Server**:
     Run the container to start the Jupyter server. This command also mounts your current directory (`-v`) and forwards the port (`-p`).
-
+    Make sure the Docker Desktop program is running/open. 
     ```bash
     docker run --rm -p 127.0.0.1:8888:8888 -v "${PWD}:/usr/src/app" trading-comp-env jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
     ```
@@ -92,7 +96,7 @@ This is the most important step for debugging\! It lets you test your `submissio
 
 3.  **Run the Local Evaluator:**
     The Docker container provides a helper command `local-eval`. Run it from the project's root directory:
-
+    Make sure the Docker Desktop program is running/open. 
     ```bash
     # Run evaluation using data/comp_data.csv and submission/submission.py
     # For PowerShell
@@ -217,7 +221,7 @@ The Docker image packages all dependencies and adds a helper command `submit`.
     ```
 
 3.  **Run Submission Script**: From the root directory, run the `submit` command via Docker. This will securely use your `.env` file and upload your `submission/` directory.
-
+    Make sure the Docker Desktop program is running/open. 
     ```bash
     # For PowerShell
     docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env submit
