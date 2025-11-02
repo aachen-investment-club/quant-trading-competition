@@ -4,7 +4,7 @@
 
 We're excited to have you here. This competition is a fun way to learn about and practice algorithmic trading. Don't worry if you're new to this—this guide is designed to be beginner-friendly and walk you through every step, from setup to submission.
 
-You can choose to participate **on your own or as a team**. The goal is to design, test, and submit a trading strategy.
+Please find a team partner in our list on notion. The goal is to design, test, and submit a trading strategy.
 
 This guide explains how to use the provided Docker environment to develop your strategy, test it locally, and submit it for evaluation. Let's get started\!
 
@@ -18,7 +18,7 @@ Your submission is run in a secure, event-driven AWS Lambda environment. The pro
 2.  **Factory Call**: The evaluator imports your `submission.py` and calls your factory function `build_trader(universe: list[str])`. This must return your trader object.
 3.  **Event Loop**: The evaluator reads a hidden test data file (like a CSV of prices) one step at a time. For each step (or "batch"), it calls your trader's primary method: `on_quote(market: Market, portfolio: Portfolio)`.
 4.  **Interface**: Your trader must interact with the provided `market` and `portfolio` objects to get prices and execute trades.
-5.  **Scoring**: Your final score is the **annualized Sharpe ratio** of your portfolio's NAV history over the backtest.
+5.  **Scoring**: Your final score is the **Sharpe ratio** of your portfolio's NAV history over the backtest.
 
 ### The `submission.py` Interface
 
@@ -47,7 +47,11 @@ All local development and testing should be done using the provided Docker envir
     From the root of the project, run the docker command. This downloads the latest train data file and stores it into /data in your root directory.
 
     ```bash
+    # For PowerShell
     docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env sync-data
+
+    # For macOS/Linux (note the quotes)
+    docker run --rm --env-file .env -v "$(pwd):/usr/src/app" trading-comp-env sync-data
     ```
 
 
@@ -55,35 +59,30 @@ You now have two main options for local development: data exploration with Jupyt
 
 -----
 
-## 3\. Option A: Data Exploration (Jupyter & VS Code)
+## 3\. Data Exploration (Jupyter & VS Code)
 
 To explore the data or experiment with models, you can run a Jupyter server inside the Docker container and connect to it directly from VS Code.
-
-1.  **Run the Jupyter Server**:
+1. **Install the Jupyter Extension for VS Code**
+    Go the extensions tab on the left side and install the Jupyter extension from Microsoft.
+2.  **Run the Jupyter Server**:
     Run the container to start the Jupyter server. This command also mounts your current directory (`-v`) and forwards the port (`-p`).
 
     ```bash
-    docker run --rm \
-      -p 127.0.0.1:8888:8888 \
-      -v "${PWD}:/usr/src/app" \
-      trading-comp-env \
-      jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+    docker run --rm -p 127.0.0.1:8888:8888 -v "${PWD}:/usr/src/app" trading-comp-env jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
     ```
 
-2.  **Connect VS Code**:
+3.  **Connect VS Code**:
 
       * In the terminal output from the previous step, **copy the URL** that includes the token (it looks like `http://127.0.0.1:8888/?token=...`).
-      * Open VS Code in your project folder.
-      * Open the **Command Palette** (View \> Command Palette... or `Ctrl+Shift+P`).
-      * Type and select **`Jupyter: Specify Jupyter server for connections`**.
-      * Choose **"Existing"**.
-      * **Paste the full URL** you copied from your terminal and press Enter.
-
-You can now open a `.ipynb` notebook file in VS Code, click "Select Kernel" (top-right), and choose the `trading-comp-env` kernel. All code will execute inside the container.
-
+      * Create or open a Jupyter Notebook file (e.g., notebooks/my_analysis.ipynb).
+      * In the top-right corner of the notebook, click the "Select Kernel" button.
+      * From the dropdown, choose "Jupyter Server".
+      * Select "Existing" from the next list.
+      * Paste the full URL (with token) you copied from your terminal and press Enter.
+    You can now run code in your notebook, and it will execute inside the Docker container with all the correct libraries.
 -----
 
-## 4\. Option B: Local Backtest Evaluation
+## 4\. Local Backtest Evaluation
 
 This is the most important step for debugging\! It lets you test your `submission/submission.py` file locally using the exact same evaluation logic as the cloud environment. This helps you find bugs and see the expected performance metrics before submitting.
 
@@ -96,7 +95,11 @@ This is the most important step for debugging\! It lets you test your `submissio
 
     ```bash
     # Run evaluation using data/comp_data.csv and submission/submission.py
+    # For PowerShell
     docker run --rm -v "${PWD}:/usr/src/app" trading-comp-env local-eval
+
+    # For macOS/Linux
+    docker run --rm -v "$(pwd):/usr/src/app" trading-comp-env local-eval
     ```
 
     This command automatically defaults to using `submission/submission.py` as the input file.
@@ -216,13 +219,11 @@ The Docker image packages all dependencies and adds a helper command `submit`.
 3.  **Run Submission Script**: From the root directory, run the `submit` command via Docker. This will securely use your `.env` file and upload your `submission/` directory.
 
     ```bash
+    # For PowerShell
     docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env submit
-    ```
 
-    You can also provide a custom label for your submission:
-
-    ```bash
-    SUBMISSION_ID=my-first-try docker run --rm -e SUBMISSION_ID --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env submit
+    # For macOS/Linux
+    docker run --rm --env-file .env -v "$(pwd):/usr/src/app" trading-comp-env submit
     ```
 
 -----
