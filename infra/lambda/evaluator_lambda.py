@@ -256,7 +256,7 @@ def evaluate_submission(py_path, table, participant_id, submission_id, competiti
     # The 'score' will be the Sharpe Ratio, used for the GSI
     score = sharpe
 
-    evaluation_id = f"{submission_id}#{test_key}"
+    evaluation_id = f"{submission_id}"
 
     item = {
         'participant_id': participant_id,
