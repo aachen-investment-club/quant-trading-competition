@@ -229,7 +229,7 @@ The Docker image packages all dependencies and adds a helper command `submit`.
     # For macOS/Linux
     docker run --rm --env-file .env -v "$(pwd):/usr/src/app" trading-comp-env submit
     ```
-
+    You can see your result on this website: https://www.aachen-investment-club.de/teams/quant/leaderboard.
 -----
 
 ## 7\. Rules & Guidelines
