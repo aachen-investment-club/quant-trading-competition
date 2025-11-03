@@ -1,66 +1,114 @@
-from pricing.Market import Market
-from pricing.Position import Position
+"""
+Portfolio management module for trading simulation.
 
+This module defines the Portfolio class, which manages cash and positions,
+enforcing leverage limits and providing methods to buy and sell products.
+
+Author: Mathis Makarski + ChatGPT
+Date: 2025-11-02
+"""
+
+import logging
+from pricing.Market import Market
+
+logger = logging.getLogger("local_eval")
 
 class Portfolio():
-    def __init__(self, cash: float, market: Market) -> None:
+    def __init__(self, cash: float, market: "Market", leverage_limit: float) -> None:
         self.cash: float = cash
         self.market: Market = market
-        self.positions: dict[str, Position] = {}
+        self.positions: dict[str, int] = {}  # key: product, value: quantity
+        self.leverage_limit: float = leverage_limit  # max leverage allowed
 
-        # init tradelog
-        self.tradelog: dict[str, list[dict]] = {}
-        for ric in market.universe:
-            self.tradelog[ric] = []
+    def _get_price(self, product: str) -> float:
+        """Retrieve the last market price for a given product."""
+        if product not in self.market.quotes:
+            raise ValueError(f"No quote available for {product}")
+        return self.market.quotes[product].get("price", None)
+    
+    def _get_timestamp(self, product) -> int:
+        """Retrieve the current market timestamp for the product quote."""
+        if product not in self.market.quotes:
+            raise ValueError(f"No quote available for {product}")
+        return self.market.quotes[product].get("timestep", None)
 
+    def _gross_exposure(self) -> float:
+        """Compute gross exposure = sum(|position| * price)"""
+        total = 0.0
+        for product, qty in self.positions.items():
+            price = self._get_price(product)
+            total += abs(qty) * price
+        return total
 
-    def nav(self: "Portfolio") -> float:
-        '''Net Asset Value'''
-        positions_mtm = sum([position.mark_to_market(self.market) for position in self.positions.values()])
-        return self.cash + positions_mtm
+    def _net_asset_value(self) -> float:
+        """Compute portfolio net asset value = cash + sum(qty * price)"""
+        value = self.cash
+        for product, qty in self.positions.items():
+            price = self._get_price(product)
+            value += qty * price
+        return value
+    
+    def _leverage(self) -> float:
+        """Compute current leverage = gross exposure / net asset value"""
+        gross = self._gross_exposure()
+        net_value = self._net_asset_value()
+        return gross / max(net_value, 1e-8)  # Avoid division by zero
 
-    def enter(self: "Portfolio", new_position: Position) -> None:
+    def _check_leverage(self, new_cash: float, new_positions: dict[str, int]) -> bool:
+        """Check whether the new portfolio state respects leverage limits."""
+        gross = sum(abs(qty) * self._get_price(p) for p, qty in new_positions.items())
+        net_value = new_cash + sum(qty * self._get_price(p) for p, qty in new_positions.items())
+        leverage = gross / max(net_value, 1e-8)
+        return leverage <= self.leverage_limit
 
-        # get market data
-        timestep = self.market.quotes[new_position.product.id]['timestep']
-        new_position.price = new_position.product.present_value(self.market)
+    def buy(self, product: str, quantity: int) -> bool:
+        """Attempt to buy `quantity` units of `product`."""
+        timestamp = self._get_timestamp(product)
+        price = self._get_price(product)
+        cost = price * quantity
 
-        # check if enough funds
-        if self.cash < new_position.price * new_position.quantity:
-            raise Exception("Insufficient funds")
-        
-        # enter position
-        else:
-            self.cash -= new_position.price * new_position.quantity
+        new_cash = self.cash - cost
+        new_positions = self.positions.copy()
+        new_positions[product] = new_positions.get(product, 0) + quantity
 
-            # check if position already exists, if yes rebalance
-            if new_position.product.id in self.positions.keys():
-                current_position = self.positions[new_position.product.id]
-                current_position.rebalance(new_position.price, new_position.quantity)
-            
-            # add new position
-            else: self.positions[new_position.product.id] = new_position
+        if not self._check_leverage(new_cash, new_positions):
+            logger.warning(f"{timestamp} | Trade rejected: leverage limit exceeded.")
+            return False
 
-            # update tradelog
-            self.tradelog[new_position.product.id].append({
-                "timestep": timestep,
-                "quantity": new_position.quantity,
-                "price": new_position.price
-                })
+        self.cash = new_cash
+        self.positions = new_positions
+        logger.info(f"{timestamp} | BOUGHT {quantity} {product} @ {price} | new cash={self.cash:.2f}")
+        return True
 
-    def exit(self: "Portfolio", id: str) -> None:
+    def sell(self, product: str, quantity: int) -> bool:
+        """Attempt to sell `quantity` units of `product` (shorts allowed)."""
+        timestamp = self._get_timestamp(product)
+        price = self._get_price(product)
+        proceeds = price * quantity
 
-        if id not in self.positions.keys():
-            raise Exception("Position not found")
-        else:
-            exit_position = self.positions.pop(id) # Pop the position
-            self.cash +=  exit_position.mark_to_market(self.market)
-            
-            # --- FIX ---
-            # Append to the tradelog, don't replace it
-            # Log a negative quantity to show a sale
-            self.tradelog[id].append({
-                "timestep": self.market.quotes[id]['timestep'],
-                "quantity": -exit_position.quantity, # Log negative quantity
-                "price": exit_position.price
-                })
+        new_cash = self.cash + proceeds
+        new_positions = self.positions.copy()
+        new_positions[product] = new_positions.get(product, 0) - quantity
+
+        if not self._check_leverage(new_cash, new_positions):
+            logger.warning("Trade rejected: leverage limit exceeded.")
+            return False
+
+        self.cash = new_cash
+        self.positions = new_positions
+        logger.info(f"{timestamp} | SOLD {quantity} {product} @ {price} | new cash={self.cash:.2f}")
+        return True
+
+    def summary(self) -> dict:
+        """Return a snapshot of the portfolio."""
+        return {
+            "cash": self.cash,
+            "positions": self.positions,
+            "gross_exposure": self._gross_exposure(),
+            "net_value": self._net_asset_value(),
+            "leverage": self._leverage(),
+        }
+
+    def __str__(self) -> str:
+        return str(self.summary())
+

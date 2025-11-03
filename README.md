@@ -1,10 +1,10 @@
-# AIC Quant Trading Competition — Participant Guide 🚀
+# AIC Quant Competition — Participant Guide 🚀
 
-**Welcome to the Aachen Investment Club's (AIC) internal Quant Trading Competition\!**
+**Welcome to the Aachen Investment Club's internal Quant Competition\!**
 
 We're excited to have you here. This competition is a fun way to learn about and practice algorithmic trading. Don't worry if you're new to this—this guide is designed to be beginner-friendly and walk you through every step, from setup to submission.
 
-Please find a team partner in our list on notion. The goal is to design, test, and submit a trading strategy.
+Please find a team partner in our list on notion. The goal is to design, test, and submit a trading strategy on synthetic price data.
 
 This guide explains how to use the provided Docker environment to develop your strategy, test it locally, and submit it for evaluation. Let's get started\!
 
@@ -12,29 +12,72 @@ This guide explains how to use the provided Docker environment to develop your s
 
 ## 1\. How Your Strategy is Evaluated
 
+
+### Submission Process
+
 Your submission is run in a secure, event-driven AWS Lambda environment. The process is:
 
 1.  **Submission**: You upload a `submission/` folder containing your `submission.py` file. ([see file](submission/submission.py))
-2.  **Factory Call**: The evaluator imports your `submission.py` and calls your factory function `build_trader(universe: list[str])`. This must return your trader object.
+2.  **Factory Call**: The evaluator imports your `submission.py` and calls your factory function `build_trader()`. This must return your trader object.
 3.  **Event Loop**: The evaluator reads a hidden test data file (like a CSV of prices) one step at a time. For each step (or "batch"), it calls your trader's primary method: `on_quote(market: Market, portfolio: Portfolio)`.
 4.  **Interface**: Your trader must interact with the provided `market` and `portfolio` objects to get prices and execute trades.
-5.  **Scoring**: Your final score is the **Sharpe ratio** of your portfolio's NAV history over the backtest.
+
+### Scoring
+Your final score is the **Sharpe ratio** \(SR\) of your portfolio’s net asset value over the evaluation period. The Sharpe ratio measures **risk-adjusted return**: it shows how much return your strategy earns for the risk taken. The excess return is just your strategy's returns \(R\) (we assume a risk-free rate \(R_f = 0\)), and the risk is measured by the standard deviation of your returns \(\sigma\).
+
+
+$$SR = \frac{R - R_f}{\sigma} = \frac{R}{\sigma}$$
+
+## 2. How to build your Strategy
 
 ### The `submission.py` Interface
+([See file](submission/submission.py))
 
-Your *only* submitted file, `submission/submission.py`, **must** provide three things:
+Your *only* submitted file, `submission/submission.py`, **must** provide two things:
 
-1.  **A `Product` Class**: You must define a class that inherits from `pricing.Product` and implements the `present_value(self, market: Market) -> float` method. This is how the evaluator's portfolio simulation knows the value of your positions.
-2.  **A Trader Class**: This class must have an `on_quote(self, market: Market, portfolio: Portfolio)` method. This is your main logic loop.
-3.  **A `build_trader` Function**: This function must return an instance of your Trader Class.
+-  **A Trader Class**: This class must have an `on_quote(market: Market, portfolio: Portfolio)` method. This is your main logic loop.
+-  **A `build_trader` Function**: This function must return an instance of your Trader Class.
 
-The `pricing` modules (`Product`, `Position`, `Market`, `Portfolio`) are **mocked and provided for you** in the Lambda environment. You just need to import and use them.
+The `pricing` modules (`Market` and `Portfolio`) are **mocked and provided for you** in the Lambda environment. You just need to import and use them like follows.
+
+### The `Market.py` Interface
+([See file](src/pricing/Market.py))
+
+How to retrieve the **universe of products** you can trade on:
+```py
+all_products = market.universe
+```
+
+How to retrieve **market prices** at the **current timestep**:
+```py
+quote = market.quotes["INTERESTingProduct"]   # returns a dict: {key: timestep, value: price}
+```
+
+### The `Portfolio.py` Interface
+([See file](src/pricing/Portfolio.py))
+
+How to **initiate trades**:
+```py
+# BUY
+portfolio.buy(product="INTERESTingProduct", quantity=100)
+# SELL
+portfolio.sell(product="INTERESTingProduct", quantity=100)
+```
+
+**Information** you can retrieve from your portfolio:
+```py
+cash = portfolio.cash
+positions = portfolio.postitions  # returns dict: {key: product, value: quantity}
+nav = portfolio._net_asset_value()
+gross = portfolio._gross_exposure()
+leverage = portfolio._leverage()
+```
 
 -----
 
-## 2\. Local Development Setup (Docker)
+## 3\. Local Development Setup (Docker)
 
-All local development and testing should be done using the provided Docker environment. This ensures your code runs with the exact same dependencies as the cloud evaluator. As a code editor we recommend VS Code
+*All local development* and testing should be done using the provided *Docker environment*. This ensures your code runs with the exact same dependencies as the cloud evaluator. As a code editor we recommend VS Code
 
 0.  **Install Docker and VS Code**
     * Go to https://code.visualstudio.com/ to install VS Code.
@@ -47,13 +90,13 @@ All local development and testing should be done using the provided Docker envir
     docker build -t trading-comp-env .
     ```
 
-2.  **Get Credentials**: Your host will provide you with:
+2.  **Get Credentials**: After you registered your team, your competition host will provide you with:
 
     * `AWS_REGION`
-    * `AWS_ACCESS_KEY_ID`
-    * `AWS_SECRET_ACCESS_KEY`
     * `SUBMISSIONS_BUCKET`
     * `PARTICIPANT_ID`
+    * `AWS_ACCESS_KEY_ID`
+    * `AWS_SECRET_ACCESS_KEY`
 
 3.  **Create `.env` File**: Create a file named `.env` in the root of the `quant-trading-competition` directory. Paste your credentials into it.
 
@@ -65,7 +108,7 @@ All local development and testing should be done using the provided Docker envir
     AWS_SECRET_ACCESS_KEY=...
     ```
 
-3.  **Get the latest test data**:
+3.  **Download Train Data**:
     Make sure the Docker Desktop program is running/open. From the root of the project, run the docker command. This downloads the latest train data file and stores it into /data in your root directory.
 
     ```bash
@@ -77,11 +120,11 @@ All local development and testing should be done using the provided Docker envir
     ```
 
 
-You now have two main options for local development: data exploration with Jupyter or backtesting your `submission.py`.
+You now have two main options for local development: **data exploration** with Jupyter or **evaluating** your `submission.py` on the downloaded train data.
 
 -----
 
-## 3\. Data Exploration (Jupyter & VS Code)
+## 4\. Data Exploration (Jupyter & VS Code)
 
 To explore the data or experiment with models, you can run a Jupyter server inside the Docker container and connect to it directly from VS Code.
 1. **Install the Jupyter Extension for VS Code**
@@ -105,7 +148,7 @@ To explore the data or experiment with models, you can run a Jupyter server insi
 
 -----
 
-## 4\. Local Backtest Evaluation
+## 5\. Local Evaluation
 
 This is the most important step for debugging\! It lets you test your `submission/submission.py` file locally using the exact same evaluation logic as the cloud environment. This helps you find bugs and see the expected performance metrics before submitting.
 
@@ -138,7 +181,7 @@ This allows you to iterate quickly and confirm your strategy behaves as expected
 
 -----
 
-## 5\. How to Submit
+## 6\. How to Submit
 
 The Docker image packages all dependencies and adds a helper command `submit`.
 
@@ -156,7 +199,7 @@ You can see your result on this website: https://www.aachen-investment-club.de/t
 
 -----
 
-## 6\. Rules & Guidelines
+## 7\. Rules & Guidelines
 
   * **File**: You must submit a single `submission/submission.py`.
   * **Timeout**: Your submission has **15 minutes** (900 seconds) to run. If it exceeds this, it will fail.

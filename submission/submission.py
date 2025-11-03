@@ -1,95 +1,74 @@
 from __future__ import annotations
-import types
 
 # --- Participant Imports ---
 # These modules are mocked by the evaluator_lambda.py and will only
 # be available when running inside the Lambda environment.
 try:
-    from pricing.Product import Product
-    from pricing.Position import Position
     from pricing.Market import Market
     from pricing.Portfolio import Portfolio
 except ImportError:
     print("Failed to import backtest modules. Are you running locally?")
     # Define dummy classes for local linting/type-checking if needed
-    class Product: pass
-    class Position: pass
     class Market: pass
     class Portfolio: pass
 
-# --- 1. Define a Product ---
-# Participants MUST define a concrete Product class so the
-# evaluator's Portfolio can call .present_value()
+# --- Setup Logger ---
+import logging
+logger = logging.getLogger("local_eval")
 
-class SimpleFX(Product):
-    """A simple product implementation that reads from market quotes."""
-    def __init__(self: "SimpleFX", id: str) -> None:
-        super().__init__(id)
-
-    def present_value(self: "SimpleFX", market: Market) -> float:
-        """
-        Gets the current price from the market quotes.
-        The Lambda's CSV reader provides 'price' and 'data'.
-        """
-        if self.id not in market.quotes:
-            return 0.0  # No price available yet
-        
-        # Use the 'price' field provided by the Lambda's CSV reader
-        return market.quotes[self.id]['price']
-
-# --- 2. Define the Trader ---
-# This object will be instantiated by the factory
+# --- Define the Trader ---
+# This object will be instantiated by the factory function
 class TestTrader:
     """
-    A simple test trader that:
-    - Buys 100 EURUSD if it sees the price > 1.1 and has no position.
-    - Sells all EURUSD if it sees the price < 1.05 and has a position.
+    Here you will define your trading strategy. 
+
+    The TestTrader provides a simple example strategy that:
+    - BUYS INTERESTingProduct if it sees the price < 3.0 and has no position.
+    - SELLS INTERESTingProducts if it sees the price > 4.5 and has a position.
     """
-    def __init__(self, universe: list[str]):
-        self.universe = universe
-        self.products = {}
-        for product_id in universe:
-            self.products[product_id] = SimpleFX(product_id)
-            
-        print(f"TestTrader initialized for universe: {universe}")
+    def __init__(self) -> None:
+        logger.debug("TestTrader initialized.")
+        # You can add more initialization logic here if needed.
 
     def on_quote(self, market: Market, portfolio: Portfolio) -> None:
         """
         This is the main event loop called by the evaluator.
         """
-        # We only care about INTERESTingProduct for this test
-        product_id = "INTERESTingProduct"
-        if product_id not in self.products or product_id not in market.quotes:
-            # Not enough data to trade
-            return
-
-        price = market.quotes[product_id]['price']
         
+        #--- INTERESTingProduct Logic ---
+        product = "INTERESTingProduct"
+
         # Check if we already have a position
-        has_position = product_id in portfolio.positions
+        has_long_position = product in portfolio.positions and portfolio.positions[product] > 0
+        has_short_position = product in portfolio.positions and portfolio.positions[product] < 0
 
-        # --- Entry Logic ---
-        if not has_position and price < 3.0:
-            try:
-                # Create a new position object
-                pos = Position(self.products[product_id], quantity=100)
-                # Enter the position
-                portfolio.enter(pos)
-            except Exception as e:
-                print(f"Error entering position: {e}")
+        price = market.quotes[product]['price']
 
-        # --- Exit Logic ---
-        elif has_position and price > 4.0:
-            try:
-                # Exit the position by its ID
-                portfolio.exit(product_id)
-            except Exception as e:
-                print(f"Error exiting position: {e}")
+        # BUY Logic
+        if not has_long_position and price < 3.0:
+            portfolio.buy(product, 10000)
 
-# --- 3. Define the Factory Function ---
+        # SELL Logic
+        elif not has_short_position and price > 4.5:
+            portfolio.sell(product, 10000)
+
+
+        #--- James_Fund_007 Logic ---
+        product = "James_Fund_007"
+
+        has_long_position = product in portfolio.positions and portfolio.positions[product] > 0 
+
+        if not has_long_position:
+            portfolio.buy(product, 1000)
+
+
+        # logger.debug(portfolio)  # this will log the total portfolio state
+
+
+# --- Define the Factory Function ---
 # The evaluator_lambda.py will call this function!
-def build_trader(universe: list[str]) -> TestTrader:
+def build_trader() -> TestTrader:
     """
     Factory function to build and return the trader instance.
     """
-    return TestTrader(universe)
+    return TestTrader()
