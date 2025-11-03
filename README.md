@@ -45,12 +45,12 @@ The `pricing` modules (`Market` and `Portfolio`) are **mocked and provided for y
 
 How to retrieve the **universe of products** you can trade on:
 ```py
-all_products = market.universe
+all_products = market.universe  # returns list[str]
 ```
 
 How to retrieve **market prices** at the **current timestep**:
 ```py
-quote = market.quotes["INTERESTingProduct"]   # returns a dict: {key: timestep, value: price}
+quote = market.quotes["INTERESTingProduct"]  # returns a dict: {key: timestep, value: price}
 ```
 
 ### The `Portfolio.py` Interface
@@ -72,6 +72,18 @@ nav = portfolio._net_asset_value()
 gross = portfolio._gross_exposure()
 leverage = portfolio._leverage()
 ```
+
+### Initial Portfolio Settings
+You'll start with:
+- Initial Cash Amount = 100.000
+- Leverage Limit = 10
+
+while
+- Leverage = Gross Exposure / Net Asset Value
+- Net Asset Value = Cash + Market Value of your Positions
+- Gross Exposure = sum over your positions ( | quantity | * market price )
+
+Therefore, as we take the norm of quantity, longs and shorts do not cancel out when computing the leverage. Since this is the first time we host this competition with the given datasets, maybe we have to adjust the leverage limit in future rounds.
 
 -----
 
