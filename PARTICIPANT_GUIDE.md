@@ -1,10 +1,10 @@
-# AIC Quant Trading Competition — Participant Guide 🚀
+# AIC Quant Competition — Participant Guide 🚀
 
-**Welcome to the Aachen Investment Club's (AIC) internal Quant Trading Competition\!**
+**Welcome to the Aachen Investment Club's internal Quant Competition\!**
 
 We're excited to have you here. This competition is a fun way to learn about and practice algorithmic trading. Don't worry if you're new to this—this guide is designed to be beginner-friendly and walk you through every step, from setup to submission.
 
-You can choose to participate **on your own or as a team**. The goal is to design, test, and submit a trading strategy.
+Please find a team partner in our list on notion. The goal is to design, test, and submit a trading strategy on synthetic price data.
 
 This guide explains how to use the provided Docker environment to develop your strategy, test it locally, and submit it for evaluation. Let's get started\!
 
@@ -12,70 +12,155 @@ This guide explains how to use the provided Docker environment to develop your s
 
 ## 1\. How Your Strategy is Evaluated
 
+
+### Submission Process
+
 Your submission is run in a secure, event-driven AWS Lambda environment. The process is:
 
-1.  **Submission**: You upload a `submission/` folder containing your `submission.py` file.
-2.  **Factory Call**: The evaluator imports your `submission.py` and calls your factory function `build_trader(universe: list[str])`. This must return your trader object.
+1.  **Submission**: You upload a `submission/` folder containing your `submission.py` file. ([see file](submission/submission.py))
+2.  **Factory Call**: The evaluator imports your `submission.py` and calls your factory function `build_trader()`. This must return your trader object.
 3.  **Event Loop**: The evaluator reads a hidden test data file (like a CSV of prices) one step at a time. For each step (or "batch"), it calls your trader's primary method: `on_quote(market: Market, portfolio: Portfolio)`.
 4.  **Interface**: Your trader must interact with the provided `market` and `portfolio` objects to get prices and execute trades.
-5.  **Scoring**: Your final score is the **annualized Sharpe ratio** of your portfolio's NAV history over the backtest.
+
+### Scoring
+Your final score is the **Sharpe ratio** \(SR\) of your portfolio’s net asset value over the evaluation period. The Sharpe ratio measures **risk-adjusted return**: it shows how much return your strategy earns for the risk taken. The excess return is just your strategy's returns \(R\) (we assume a risk-free rate \(R_f = 0\)), and the risk is measured by the standard deviation of your returns \(\sigma\).
+
+
+$$SR = \frac{R - R_f}{\sigma} = \frac{R}{\sigma}$$
+
+## 2. How to build your Strategy
 
 ### The `submission.py` Interface
+([See file](submission/submission.py))
 
-Your *only* submitted file, `submission/submission.py`, **must** provide three things:
+Your *only* submitted file, `submission/submission.py`, **must** provide two things:
 
-1.  **A `Product` Class**: You must define a class that inherits from `pricing.Product` and implements the `present_value(self, market: Market) -> float` method. This is how the evaluator's portfolio simulation knows the value of your positions.
-2.  **A Trader Class**: This class must have an `on_quote(self, market: Market, portfolio: Portfolio)` method. This is your main logic loop.
-3.  **A `build_trader` Function**: This function must return an instance of your Trader Class.
+-  **A Trader Class**: This class must have an `on_quote(market: Market, portfolio: Portfolio)` method. This is your main logic loop.
+-  **A `build_trader` Function**: This function must return an instance of your Trader Class.
 
-The `pricing` modules (`Product`, `Position`, `Market`, `Portfolio`) are **mocked and provided for you** in the Lambda environment. You just need to import and use them.
+The `pricing` modules (`Market` and `Portfolio`) are **mocked and provided for you** in the Lambda environment. You just need to import and use them like follows.
+
+### The `Market.py` Interface
+([See file](src/pricing/Market.py))
+
+How to retrieve the **universe of products** you can trade on:
+```py
+all_products = market.universe  # returns list[str]
+```
+
+How to retrieve **market prices** at the **current timestep**:
+```py
+quote = market.quotes["INTERESTingProduct"]  # returns a dict: {key: timestep, value: price}
+```
+
+### The `Portfolio.py` Interface
+([See file](src/pricing/Portfolio.py))
+
+How to **initiate trades**:
+```py
+# BUY
+portfolio.buy(product="INTERESTingProduct", quantity=100)
+# SELL
+portfolio.sell(product="INTERESTingProduct", quantity=100)
+```
+
+**Information** you can retrieve from your portfolio:
+```py
+cash = portfolio.cash
+positions = portfolio.postitions  # returns dict: {key: product, value: quantity}
+nav = portfolio._net_asset_value()
+gross = portfolio._gross_exposure()
+leverage = portfolio._leverage()
+```
+
+### Initial Portfolio Settings
+You'll start with:
+- Initial Cash Amount = 100.000
+- Leverage Limit = 10
+
+while
+- Leverage = Gross Exposure / Net Asset Value
+- Net Asset Value = Cash + Market Value of your Positions
+- Gross Exposure = sum over your positions ( | quantity | * market price )
+
+Therefore, as we take the norm of quantity, longs and shorts do not cancel out when computing the leverage. Since this is the first time we host this competition with the given datasets, maybe we have to adjust the leverage limit in future rounds.
 
 -----
 
-## 2\. Local Development Setup (Docker)
+## 3\. Local Development Setup (Docker)
 
-All local development and testing should be done using the provided Docker environment. This ensures your code runs with the exact same dependencies as the cloud evaluator.
+*All local development* and testing should be done using the provided *Docker environment*. This ensures your code runs with the exact same dependencies as the cloud evaluator. As a code editor we recommend VS Code
+
+0.  **Install Docker and VS Code**
+    * Go to https://code.visualstudio.com/ to install VS Code.
+    * Go to https://www.docker.com/products/docker-desktop/ to install Docker Desktop. 
 
 1.  **Build the Docker Image**:
-    From the root of the project, run the build command. This reads the `Dockerfile`, installs all dependencies from `requirements.txt`, and sets up the helper commands.
+    Make sure the Docker Desktop program is running/open. From the root of the project, run the build command. This reads the `Dockerfile`, installs all dependencies from `requirements.txt`, and sets up the helper commands.
 
     ```bash
     docker build -t trading-comp-env .
     ```
 
-You now have two main options for local development: data exploration with Jupyter or backtesting your `submission.py`.
+2.  **Get Credentials**: After you registered your team, your competition host will provide you with:
 
------
+    * `AWS_REGION`
+    * `SUBMISSIONS_BUCKET`
+    * `PARTICIPANT_ID`
+    * `AWS_ACCESS_KEY_ID`
+    * `AWS_SECRET_ACCESS_KEY`
 
-## 3\. Option A: Data Exploration (Jupyter & VS Code)
+3.  **Create `.env` File**: Create a file named `.env` in the root of the `quant-trading-competition` directory. Paste your credentials into it.
 
-To explore the data or experiment with models, you can run a Jupyter server inside the Docker container and connect to it directly from VS Code.
-
-1.  **Run the Jupyter Server**:
-    Run the container to start the Jupyter server. This command also mounts your current directory (`-v`) and forwards the port (`-p`).
-
-    ```bash
-    docker run --rm \
-      -p 127.0.0.1:8888:8888 \
-      -v "${PWD}:/usr/src/app" \
-      trading-comp-env \
-      jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+    ```
+    AWS_REGION=eu-central-1
+    SUBMISSIONS_BUCKET=your-comp-submissions-unique
+    PARTICIPANT_ID=your-unique-id
+    AWS_ACCESS_KEY_ID=...
+    AWS_SECRET_ACCESS_KEY=...
     ```
 
-2.  **Connect VS Code**:
+3.  **Download Train Data**:
+    Make sure the Docker Desktop program is running/open. From the root of the project, run the docker command. This downloads the latest train data file and stores it into /data in your root directory.
 
-      * In the terminal output from the previous step, **copy the URL** that includes the token (it looks like `http://127.0.0.1:8888/?token=...`).
-      * Open VS Code in your project folder.
-      * Open the **Command Palette** (View \> Command Palette... or `Ctrl+Shift+P`).
-      * Type and select **`Jupyter: Specify Jupyter server for connections`**.
-      * Choose **"Existing"**.
-      * **Paste the full URL** you copied from your terminal and press Enter.
+    ```bash
+    # For PowerShell
+    docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env sync-data
 
-You can now open a `.ipynb` notebook file in VS Code, click "Select Kernel" (top-right), and choose the `trading-comp-env` kernel. All code will execute inside the container.
+    # For macOS/Linux (note the quotes)
+    docker run --rm --env-file .env -v "$(pwd):/usr/src/app" trading-comp-env sync-data
+    ```
+
+
+You now have two main options for local development: **data exploration** with Jupyter or **evaluating** your `submission.py` on the downloaded train data.
 
 -----
 
-## 4\. Option B: Local Backtest Evaluation
+## 4\. Data Exploration (Jupyter & VS Code)
+
+To explore the data or experiment with models, you can run a Jupyter server inside the Docker container and connect to it directly from VS Code.
+1. **Install the Jupyter Extension for VS Code**
+    Go the extensions tab on the left side and install the Jupyter extension from Microsoft.
+2.  **Run the Jupyter Server**:
+    Run the container to start the Jupyter server. This command also mounts your current directory (`-v`) and forwards the port (`-p`).
+    Make sure the Docker Desktop program is running/open. 
+    ```bash
+    docker run --rm -p 127.0.0.1:8888:8888 -v "${PWD}:/usr/src/app" trading-comp-env jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+    ```
+
+3.  **Connect VS Code**:
+
+      * In the terminal output from the previous step, **copy the URL** that includes the token (it looks like `http://127.0.0.1:8888/?token=...`).
+      * Create or open a Jupyter Notebook file (e.g., src/notebooks/data_exploration_template.ipynb).
+      * In the top-right corner of the notebook, click the "Select Kernel" button.
+      * From the dropdown, choose "Jupyter Server".
+      * Select "Existing" from the next list.
+      * Paste the full URL (with token) you copied from your terminal and press Enter.
+    You can now run code in your notebook, and it will execute inside the Docker container with all the correct libraries.
+
+-----
+
+## 5\. Local Evaluation
 
 This is the most important step for debugging\! It lets you test your `submission/submission.py` file locally using the exact same evaluation logic as the cloud environment. This helps you find bugs and see the expected performance metrics before submitting.
 
@@ -85,10 +170,14 @@ This is the most important step for debugging\! It lets you test your `submissio
 
 3.  **Run the Local Evaluator:**
     The Docker container provides a helper command `local-eval`. Run it from the project's root directory:
-
+    Make sure the Docker Desktop program is running/open. 
     ```bash
     # Run evaluation using data/comp_data.csv and submission/submission.py
+    # For PowerShell
     docker run --rm -v "${PWD}:/usr/src/app" trading-comp-env local-eval
+
+    # For macOS/Linux
+    docker run --rm -v "$(pwd):/usr/src/app" trading-comp-env local-eval
     ```
 
     This command automatically defaults to using `submission/submission.py` as the input file.
@@ -104,118 +193,21 @@ This allows you to iterate quickly and confirm your strategy behaves as expected
 
 -----
 
-## 5\. Your `submission.py` File (Example)
-
-Use this as a template for your `submission/submission.py`:
-
-```python
-# --- These imports are provided by the Lambda environment ---
-from pricing.Product import Product
-from pricing.Position import Position
-from pricing.Market import Market
-from pricing.Portfolio import Portfolio
-
-# --- 1. Define Your Product Class ---
-class MyFX(Product):
-    """A simple Product that gets its price from the market quotes."""
-    def __init__(self, id: str):
-        super().__init__(id)
-
-    def present_value(self, market: Market) -> float:
-        """Reads the 'price' from the quote provided by the evaluator."""
-        if self.id not in market.quotes:
-            return 0.0
-        return market.quotes[self.id]['price']
-
-# --- 2. Define Your Trader Class ---
-class MyTrader:
-    """A simple moving average crossover trader."""
-    def __init__(self, universe: list[str]):
-        self.products = {ric: MyFX(ric) for ric in universe}
-        
-        # Store price history
-        self.history = {ric: [] for ric in universe}
-        self.fast_ma = 5
-        self.slow_ma = 20
-        print(f"MyTrader initialized for {universe}")
-
-    def on_quote(self, market: Market, portfolio: Portfolio):
-        """This is called on every new batch of quotes."""
-        
-        ric = "PRODUCT_A" # Trade only one product for simplicity
-        if ric not in market.quotes:
-            return
-
-        # --- 1. Update Data ---
-        price = market.quotes[ric]['price']
-        self.history[ric].append(price)
-        if len(self.history[ric]) > self.slow_ma:
-            self.history[ric].pop(0) # Keep history bounded
-        else:
-            return # Not enough data to trade
-
-        # --- 2. Calculate Signals ---
-        fast = sum(self.history[ric][-self.fast_ma:]) / self.fast_ma
-        slow = sum(self.history[ric]) / len(self.history[ric])
-        
-        has_position = ric in portfolio.positions
-
-        # --- 3. Execute Trades ---
-        try:
-            # Go Long
-            if fast > slow and not has_position:
-                pos = Position(self.products[ric], quantity=100)
-                portfolio.enter(pos)
-                
-            # Go Flat
-            elif fast < slow and has_position:
-                portfolio.exit(ric)
-                
-        except Exception as e:
-            # Portfolio.enter/exit can fail (e.g., insufficient funds)
-            print(f"Trade Error: {e}")
-
-# --- 3. Define the Factory Function (REQUIRED) ---
-def build_trader(universe: list[str]) -> MyTrader:
-    """This function is called by the evaluator to get your trader."""
-    return MyTrader(universe)
-```
-
------
-
 ## 6\. How to Submit
 
 The Docker image packages all dependencies and adds a helper command `submit`.
 
-1.  **Get Credentials**: Your host will provide you with:
+**Run Submission Script**: From the root directory, run the `submit` command via Docker. This will securely use your `.env` file and upload your `submission/` directory. Make sure the Docker Desktop program is running/open. 
+    
+```bash
+# For PowerShell
+docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env submit
 
-      * `AWS_REGION`
-      * `AWS_ACCESS_KEY_ID`
-      * `AWS_SECRET_ACCESS_KEY`
-      * `SUBMISSIONS_BUCKET`
-      * `PARTICIPANT_ID`
+# For macOS/Linux
+docker run --rm --env-file .env -v "$(pwd):/usr/src/app" trading-comp-env submit
+```
 
-2.  **Create `.env` File**: Create a file named `.env` in the root of the `quant-trading-competition` directory. Paste your credentials into it.
-
-    ```
-    AWS_REGION=eu-central-1
-    SUBMISSIONS_BUCKET=your-comp-submissions-unique
-    PARTICIPANT_ID=your-unique-id
-    AWS_ACCESS_KEY_ID=...
-    AWS_SECRET_ACCESS_KEY=...
-    ```
-
-3.  **Run Submission Script**: From the root directory, run the `submit` command via Docker. This will securely use your `.env` file and upload your `submission/` directory.
-
-    ```bash
-    docker run --rm --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env submit
-    ```
-
-    You can also provide a custom label for your submission:
-
-    ```bash
-    SUBMISSION_ID=my-first-try docker run --rm -e SUBMISSION_ID --env-file .env -v "${PWD}:/usr/src/app" trading-comp-env submit
-    ```
+You can see your result on this website: https://www.aachen-investment-club.de/teams/quant/leaderboard.
 
 -----
 
