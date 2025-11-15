@@ -1,14 +1,13 @@
 import pandas as pd
 import numpy as np
-from tqdm import tqdm
-import os
-import time
-from decimal import Decimal
 import traceback
+import logging
 
 # --- Use relative imports if running scripts from parent dir ---
 from .pricing.Portfolio import Portfolio
 from .pricing.Market import Market
+
+logger = logging.getLogger("local_eval")
 
 # --- Helper function copied from evaluator_lambda.py ---
 def calculate_sharpe_ratio(nav_history, periods_per_year=252):
@@ -36,20 +35,21 @@ class Engine():
     def __init__(self, universe: list[str], data_batches: list[list[dict]], strategy_builder, initial_cash=100000.0) -> None:
         self.initial_cash = initial_cash
         self.universe = universe
-        # --- Store pre-processed data directly ---
+
+        # Store pre-processed data directly
         self.data_batches = data_batches
         self.total_data_points = sum(len(batch) for batch in data_batches)
 
-        # set strategy, portfolio and market
+        # Set strategy, portfolio and market
         self.market: Market = Market(universe)
-        self.portfolio: Portfolio = Portfolio(cash=initial_cash, market=self.market)
+        self.portfolio: Portfolio = Portfolio(cash=initial_cash, market=self.market, leverage_limit=10.0)
 
         # Build the strategy using the provided builder function
         try:
-            self.strategy = strategy_builder(self.universe)
-            print(f"Successfully built trader: {type(self.strategy).__name__}")
+            self.strategy = strategy_builder()
+            logger.debug(f"Successfully built trader: {type(self.strategy).__name__}")
         except Exception as e:
-            print(f"ERROR: Failed to build trader from submission.py: {e}")
+            logger.error(f"ERROR: Failed to build trader from submission.py: {e}")
             traceback.print_exc()
             raise
 
@@ -57,38 +57,30 @@ class Engine():
 
     def run(self) -> None:
         if not hasattr(self.strategy, 'on_quote'):
-             print("ERROR: The trader object built by build_trader() does not have an 'on_quote' method.")
+             logger.error("ERROR: The trader object built by build_trader() does not have an 'on_quote' method.")
              return
 
-        print("Starting local backtest...")
+        logger.debug("Running local evlauation...")
         
         # --- Iterate directly through pre-processed batches ---
-        with tqdm(total=self.total_data_points, unit=" quotes") as pbar:
-            for quote_batch in self.data_batches:
-                if not quote_batch: # Skip empty batches if any
-                    continue
-                
-                # 1. Update market with all quotes in the batch
-                # (The batch includes quotes for all products at one timestamp)
-                for q in quote_batch:
-                    # Don't update pbar for the 'Clock' tick
-                    if q['id'] != 'Clock':
-                        self.market.update(q)
-                        pbar.update(1)
+        for quote_batch in self.data_batches:
+            
+            # 1. Update market with all quotes in the batch
+            # (The batch includes quotes for all products at one timestamp)
+            for q in quote_batch:
+                self.market.update(q)
 
-                # 2. Call the trader's logic ONCE per batch
-                # This mimics the cloud lambda's event-driven approach
-                try:
-                    self.strategy.on_quote(self.market, self.portfolio)
-                except Exception as e:
-                    # Log errors locally to help debugging
-                    print(f"\n--- ERROR during on_quote ---")
-                    traceback.print_exc()
-                    print("--------------------------------\n")
-                    # Mimic the cloud's behavior of swallowing exceptions
-                    pass 
-                
-                # 3. Record NAV history after the batch
-                self.nav_history.append(self.portfolio.nav())
-
-        print("Backtest loop complete.")
+            # 2. Call the trader's logic ONCE per batch
+            # This mimics the cloud lambda's event-driven approach
+            try:
+                self.strategy.on_quote(self.market, self.portfolio)
+            except Exception as e:
+                # Log errors locally to help debugging
+                logger.error(f"\n--- ERROR during on_quote ---")
+                traceback.print_exc()
+                logger.error("--------------------------------\n")
+                # Mimic the cloud's behavior of swallowing exceptions
+                pass 
+            
+            # 3. Record NAV history after the batch
+            self.nav_history.append(self.portfolio._net_asset_value())

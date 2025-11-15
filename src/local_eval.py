@@ -13,14 +13,52 @@ Example:
     python local_eval.py submission/submission.py
 """
 
+import logging
 import sys
 import os
 import importlib.util
-import pandas as pd
 import csv
 import traceback
-from collections import defaultdict
+from datetime import datetime
+
+# import own modules
 from src.Engine import calculate_sharpe_ratio # Import the helper
+
+
+# --- Create Logger Object ---
+
+# Ensure logs directory exists
+os.makedirs("logs", exist_ok=True)
+
+# Create unique log filename
+timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+log_filename = os.path.join("logs", f"local_eval_{timestamp}.log")
+
+# Configure logger
+logger = logging.getLogger("local_eval")
+logger.setLevel(logging.DEBUG)
+logger.propagate = False  # Prevent duplicate logs
+
+# File handler
+file_handler = logging.FileHandler(log_filename)
+file_handler.setLevel(logging.DEBUG)
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+# Log format
+formatter = logging.Formatter(
+    fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+file_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+# Add handlers
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+
 
 # --- Assumes your local backtest code is in the 'src' directory ---
 project_root = os.path.dirname(os.path.abspath(__file__))
@@ -41,7 +79,7 @@ def read_and_batch_csv_data(csv_path: str) -> tuple[list[str], list[list[dict]]]
     Reads the CSV, detects format, determines universe, processes into batches
     suitable for the simplified Engine, and returns universe list and batches.
     """
-    print(f"Reading and batching data from: {csv_path}")
+    logger.debug(f"Reading and batching data from: {csv_path}")
     data_by_product = {} # To hold data temporarily if long format
     all_rows = [] # To hold dicts read from CSV
     universe = []
@@ -54,12 +92,12 @@ def read_and_batch_csv_data(csv_path: str) -> tuple[list[str], list[list[dict]]]
             reader = csv.DictReader(f)
             all_rows = list(reader)
 
-        print(f"CSV Headers: {headers}")
+        logger.debug(f"CSV Headers: {headers}")
         time_col = 'timestep' if 'timestep' in headers else 'timestamp' # Determine time column name
 
         # --- Format Detection and Universe Extraction ---
         if 'product_id' in headers: # LONG FORMAT
-            print("Detected LONG format CSV.")
+            logger.debug("Detected LONG format CSV.")
             universe = sorted(list(set(row['product_id'] for row in all_rows)))
             data_by_product = {ric: [] for ric in universe}
             price_col = 'mid_price' # Adjust if your price column is different
@@ -108,7 +146,7 @@ def read_and_batch_csv_data(csv_path: str) -> tuple[list[str], list[list[dict]]]
                  batched_data.append(current_batch)
 
         else: # WIDE FORMAT
-            print("Detected WIDE format CSV.")
+            logger.debug("Detected WIDE format CSV.")
             universe = sorted([h for h in headers if h != time_col])
             batched_data = []
             for row in all_rows:
@@ -133,8 +171,8 @@ def read_and_batch_csv_data(csv_path: str) -> tuple[list[str], list[list[dict]]]
                     current_batch.append({'id': 'Clock', 'timestep': ts})
                     batched_data.append(current_batch)
 
-        print(f"Determined Universe: {universe}")
-        print(f"Processed into {len(batched_data)} batches.")
+        logger.debug(f"Determined Universe: {universe}")
+        logger.debug(f"Processed into {len(batched_data)} batches.")
         return universe, batched_data
 
     except FileNotFoundError:
@@ -149,19 +187,18 @@ def read_and_batch_csv_data(csv_path: str) -> tuple[list[str], list[list[dict]]]
 # --- Load Participant Code (Remains the same) ---
 def load_submission(submission_path: str):
     """Loads the build_trader function from the participant's submission.py."""
-    print(f"Loading submission from: {submission_path}")
+    logger.debug(f"Loading submission from: {submission_path}")
     try:
         spec = importlib.util.spec_from_file_location("submission", submission_path)
         if spec is None:
              raise ImportError(f"Could not load spec for module at path: {submission_path}")
         mod = importlib.util.module_from_spec(spec)
+       
         # --- Add local src modules to prevent import errors in submission ---
         # This makes `from pricing.Product import Product` work locally
         sys.modules['pricing'] = importlib.import_module('src.pricing')
         sys.modules['pricing.Market'] = importlib.import_module('src.pricing.Market')
         sys.modules['pricing.Portfolio'] = importlib.import_module('src.pricing.Portfolio')
-        sys.modules['pricing.Position'] = importlib.import_module('src.pricing.Position')
-        sys.modules['pricing.Product'] = importlib.import_module('src.pricing.Product')
         # --- End local module injection ---
 
         spec.loader.exec_module(mod)
@@ -170,6 +207,7 @@ def load_submission(submission_path: str):
             raise AttributeError("submission.py must define a 'build_trader(universe)' function.")
 
         return mod.build_trader # Return the function itself
+    
     except FileNotFoundError:
         print(f"ERROR: Submission file not found at {submission_path}")
         sys.exit(1)
@@ -182,7 +220,7 @@ def load_submission(submission_path: str):
 # --- Main Execution Logic ---
 if __name__ == "__main__":
     # --- FIXED DATA PATH ---
-    data_path = os.path.join(os.path.dirname(project_root), "data", "train1.csv")
+    data_path = os.path.join(os.path.dirname(project_root), "data", "comp_data.csv")
 
     if len(sys.argv) != 2: # Only submission path needed now
         print("Usage: python local_eval.py <path_to_submission_py>")
@@ -218,15 +256,16 @@ if __name__ == "__main__":
 
     
     
-    final_nav = engine.portfolio.nav()
+    final_nav = engine.portfolio._net_asset_value()
     pnl = final_nav - engine.initial_cash
     sharpe = calculate_sharpe_ratio(engine.nav_history) # Pass the nav_history
 
-    print("\n--- Local Evaluation Metrics ---")
-    print(f"Final NAV:         {final_nav:,.2f}")
-    print(f"Total PnL:         {pnl:,.2f}")
-    print(f"Annualized Sharpe: {sharpe:.4f}")
+    logger.info("--- Local Evaluation Metrics ---")
+    logger.info(f"Final NAV:         {final_nav:,.2f}")
+    logger.info(f"Total PnL:         {pnl:,.2f}")
+    logger.info(f"Annualized Sharpe: {sharpe:.4f}")
+    
     # Optional: Save results
     # engine.save("./local_results")
 
-    print("Local evaluation complete.")
+    logger.debug("Local evaluation complete.")
