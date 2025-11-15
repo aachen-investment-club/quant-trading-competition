@@ -1,0 +1,18 @@
+2025-11-15 10:55:44 | DEBUG | local_eval | Loading submission from: submission/submission.py
+2025-11-15 10:55:44 | DEBUG | local_eval | Reading and batching data from: /usr/src/app/data/comp_data.csv
+2025-11-15 10:55:45 | DEBUG | local_eval | CSV Headers: ['timestep', 'INTERESTingProduct', 'James_Fund_007']
+2025-11-15 10:55:45 | DEBUG | local_eval | Detected WIDE format CSV.
+2025-11-15 10:55:45 | DEBUG | local_eval | Determined Universe: ['INTERESTingProduct', 'James_Fund_007']
+2025-11-15 10:55:45 | DEBUG | local_eval | Processed into 2000 batches.
+2025-11-15 10:55:45 | DEBUG | local_eval | TestTrader initialized.
+2025-11-15 10:55:45 | DEBUG | local_eval | Successfully built trader: TestTrader
+2025-11-15 10:55:45 | DEBUG | local_eval | Running local evlauation...
+2025-11-15 10:55:45 | INFO | local_eval | 0 | BOUGHT 1000 James_Fund_007 @ 100.0 | new cash=0.00
+2025-11-15 10:55:45 | INFO | local_eval | 207 | BOUGHT 10000 INTERESTingProduct @ 2.9854224822297324 | new cash=-29854.22
+2025-11-15 10:55:45 | INFO | local_eval | 1676 | SOLD 10000 INTERESTingProduct @ 4.5154055637658805 | new cash=15299.83
+2025-11-15 10:55:45 | INFO | local_eval | 1906 | SOLD 10000 INTERESTingProduct @ 4.503568106420349 | new cash=60335.51
+2025-11-15 10:55:45 | INFO | local_eval | --- Local Evaluation Metrics ---
+2025-11-15 10:55:45 | INFO | local_eval | Final NAV:         120,455.72
+2025-11-15 10:55:45 | INFO | local_eval | Total PnL:         20,455.72
+2025-11-15 10:55:45 | INFO | local_eval | Annualized Sharpe: 0.6974
+2025-11-15 10:55:45 | DEBUG | local_eval | Local evaluation complete.
