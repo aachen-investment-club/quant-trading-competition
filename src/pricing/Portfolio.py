@@ -4,7 +4,7 @@ Portfolio management module for trading simulation.
 This module defines the Portfolio class, which manages cash and positions,
 enforcing leverage limits and providing methods to buy and sell products.
 
-Author: Mathis Makarski + ChatGPT
+Author: Mathis Makarski
 Date: 2025-11-02
 """
 

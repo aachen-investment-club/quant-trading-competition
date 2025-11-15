@@ -46,7 +46,7 @@ class Engine():
 
         # Build the strategy using the provided builder function
         try:
-            self.strategy = strategy_builder()
+            self.strategy = strategy_builder(universe)
             logger.debug(f"Successfully built trader: {type(self.strategy).__name__}")
         except Exception as e:
             logger.error(f"ERROR: Failed to build trader from submission.py: {e}")
