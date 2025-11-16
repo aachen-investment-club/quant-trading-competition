@@ -10,6 +10,7 @@ scipy==1.11.2
 boto3==1.34.131
 botocore==1.34.131
 tqdm==4.66.1
+statsmodels
 
 # Optional utils
 pyarrow==14.0.2

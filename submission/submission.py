@@ -67,8 +67,5 @@ class TestTrader:
 
 # --- Define the Factory Function ---
 # The evaluator_lambda.py will call this function!
-def build_trader() -> TestTrader:
-    """
-    Factory function to build and return the trader instance.
-    """
-    return TestTrader()
+def build_trader(universe) -> TestTrader:
+    return TestTrader(universe)
