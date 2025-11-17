@@ -23,7 +23,7 @@ Your submission is run in a secure, event-driven AWS Lambda environment. The pro
 4.  **Interface**: Your trader must interact with the provided `market` and `portfolio` objects to get prices and execute trades.
 
 ### Scoring
-Your final score is the **Sharpe ratio** \(SR\) of your portfolio’s net asset value over the evaluation period. The Sharpe ratio measures **risk-adjusted return**: it shows how much return your strategy earns for the risk taken. The excess return is just your strategy's returns \(R\) (we assume a risk-free rate \(R_f = 0\)), and the risk is measured by the standard deviation of your returns \(\sigma\).
+Your final score is the **Sharpe ratio** $SR$ of your portfolio’s net asset value over the evaluation period. The Sharpe ratio measures **risk-adjusted return**: it shows how much return your strategy earns for the risk taken. The excess return is just your strategy's returns $R$ (we assume a risk-free rate $R_f = 0$), and the risk is measured by the standard deviation of your returns $\sigma$.
 
 
 $$SR = \frac{R - R_f}{\sigma} = \frac{R}{\sigma}$$
