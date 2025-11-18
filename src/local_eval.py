@@ -116,12 +116,12 @@ def read_and_batch_csv_data(csv_path: str) -> tuple[list[str], list[list[dict]]]
                  except (ValueError, KeyError) as e:
                     print(f"Skipping row due to error: {e} in row: {row}")
 
-            # Now, simulate batching by timestamp (like lambda's iter_quotes_from_csv_long)
+            # Now, simulate batching by timestep (like lambda's iter_quotes_from_csv_long)
             all_quotes = []
             for ric in universe:
                 all_quotes.extend(data_by_product[ric])
 
-            # Sort all quotes by timestamp first, then by id
+            # Sort all quotes by timestep first, then by id
             all_quotes.sort(key=lambda q: (q['timestep'], q['id']))
 
             batched_data = []
