@@ -1,74 +1,69 @@
 from __future__ import annotations
 
-# --- Participant Imports ---
-# These modules are mocked by the evaluator_lambda.py and will only
-# be available when running inside the Lambda environment.
+# ❌ REMOVE THIS - Lambda doesn't have pandas
+# import pandas as pd
+
 try:
     from pricing.Market import Market
     from pricing.Portfolio import Portfolio
 except ImportError:
-    print("Failed to import backtest modules. Are you running locally?")
-    # Define dummy classes for local linting/type-checking if needed
     class Market: pass
     class Portfolio: pass
 
-# --- Setup Logger ---
 import logging
 logger = logging.getLogger("local_eval")
 
-# --- Define the Trader ---
-# This object will be instantiated by the factory function
 class TestTrader:
-    """
-    Here you will define your trading strategy. 
-
-    The TestTrader provides a simple example strategy that:
-    - BUYS INTERESTingProduct if it sees the price < 3.0 and has no position.
-    - SELLS INTERESTingProducts if it sees the price > 4.5 and has a position.
-    """
-    def __init__(self) -> None:
+    def __init__(self, universe: None) -> None: 
         logger.debug("TestTrader initialized.")
-        # You can add more initialization logic here if needed.
+        self.universe = universe
+        self.fast_window = 5
+        self.slow_window = 50 
+        self.base_size = 100
+        self.history = []
 
     def on_quote(self, market: Market, portfolio: Portfolio) -> None:
-        """
-        This is the main event loop called by the evaluator.
-        """
-        
-        #--- INTERESTingProduct Logic ---
-        product = "INTERESTingProduct"
+        # Check if required products exist
+        if "INTERESTingProduct" not in market.quotes or "James_Fund_007" not in market.quotes:
+            return
 
-        # Check if we already have a position
-        has_long_position = product in portfolio.positions and portfolio.positions[product] > 0
-        has_short_position = product in portfolio.positions and portfolio.positions[product] < 0
+        # Get latest prices
+        quote_interest = market.quotes["INTERESTingProduct"]["price"]
+        quote_fund = market.quotes["James_Fund_007"]["price"]
 
-        price = market.quotes[product]['price']
+        # Save data
+        self.history.append(quote_interest)
 
-        # BUY Logic
-        if not has_long_position and price < 3.0:
-            portfolio.buy(product, 10000)
+        # Need enough points for both MAs
+        if len(self.history) < self.slow_window:
+            return
 
-        # SELL Logic
-        elif not has_short_position and price > 4.5:
-            portfolio.sell(product, 10000)
+        # ✅ Manual moving average calculation (no pandas)
+        fast_ma = sum(self.history[-self.fast_window:]) / self.fast_window
+        slow_ma = sum(self.history[-self.slow_window:]) / self.slow_window
 
+        # --- MOMENTUM LOGIC ---
 
-        #--- James_Fund_007 Logic ---
-        product = "James_Fund_007"
+        # BUY signal: fast MA crosses above slow MA
+        if fast_ma > slow_ma:
+            position_size = self.base_size
 
-        has_long_position = product in portfolio.positions and portfolio.positions[product] > 0 
+            # Optional dynamic sizing based on trend strength
+            trend_strength = abs(fast_ma - slow_ma)
+            position_size *= (1 + trend_strength)
 
-        if not has_long_position:
-            portfolio.buy(product, 1000)
+            portfolio.buy("James_Fund_007", int(position_size))
 
+        # SELL signal: fast MA crosses below slow MA
+        elif fast_ma < slow_ma:
+            position_size = self.base_size
 
-        # logger.debug(portfolio)  # this will log the total portfolio state
+            trend_strength = abs(fast_ma - slow_ma)
+            position_size *= (1 + trend_strength)
 
+            portfolio.sell("James_Fund_007", int(position_size))
 
-# --- Define the Factory Function ---
-# The evaluator_lambda.py will call this function!
-def build_trader() -> TestTrader:
-    """
-    Factory function to build and return the trader instance.
-    """
-    return TestTrader()
+def build_trader(universe=None) -> TestTrader: 
+    if universe is None:
+        universe = ["INTERESTingProduct", "James_Fund_007"]
+    return TestTrader(universe)
