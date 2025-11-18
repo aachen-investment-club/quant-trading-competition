@@ -26,8 +26,8 @@ class Portfolio():
             raise ValueError(f"No quote available for {product}")
         return self.market.quotes[product].get("price", None)
     
-    def _get_timestamp(self, product) -> int:
-        """Retrieve the current market timestamp for the product quote."""
+    def _get_timestep(self, product) -> int:
+        """Retrieve the current market timestep for the product quote."""
         if product not in self.market.quotes:
             raise ValueError(f"No quote available for {product}")
         return self.market.quotes[product].get("timestep", None)
@@ -63,7 +63,7 @@ class Portfolio():
 
     def buy(self, product: str, quantity: int) -> bool:
         """Attempt to buy `quantity` units of `product`."""
-        timestamp = self._get_timestamp(product)
+        timestep = self._get_timestep(product)
         price = self._get_price(product)
         cost = price * quantity
 
@@ -72,17 +72,17 @@ class Portfolio():
         new_positions[product] = new_positions.get(product, 0) + quantity
 
         if not self._check_leverage(new_cash, new_positions):
-            logger.warning(f"{timestamp} | Trade rejected: leverage limit exceeded.")
+            logger.warning(f"{timestep} | Trade rejected: leverage limit exceeded.")
             return False
 
         self.cash = new_cash
         self.positions = new_positions
-        logger.info(f"{timestamp} | BOUGHT {quantity} {product} @ {price} | new cash={self.cash:.2f}")
+        logger.info(f"{timestep} | BOUGHT {quantity} {product} @ {price} | new cash={self.cash:.2f}")
         return True
 
     def sell(self, product: str, quantity: int) -> bool:
         """Attempt to sell `quantity` units of `product` (shorts allowed)."""
-        timestamp = self._get_timestamp(product)
+        timestep = self._get_timestep(product)
         price = self._get_price(product)
         proceeds = price * quantity
 
@@ -91,12 +91,12 @@ class Portfolio():
         new_positions[product] = new_positions.get(product, 0) - quantity
 
         if not self._check_leverage(new_cash, new_positions):
-            logger.warning("Trade rejected: leverage limit exceeded.")
+            logger.warning(f"{timestep} | Trade rejected: leverage limit exceeded.")
             return False
 
         self.cash = new_cash
         self.positions = new_positions
-        logger.info(f"{timestamp} | SOLD {quantity} {product} @ {price} | new cash={self.cash:.2f}")
+        logger.info(f"{timestep} | SOLD {quantity} {product} @ {price} | new cash={self.cash:.2f}")
         return True
 
     def summary(self) -> dict:

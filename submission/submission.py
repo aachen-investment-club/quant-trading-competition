@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-# ❌ REMOVE THIS - Lambda doesn't have pandas
-# import pandas as pd
-
 try:
     from pricing.Market import Market
     from pricing.Portfolio import Portfolio

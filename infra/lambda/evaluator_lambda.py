@@ -68,8 +68,8 @@ class Portfolio_local():
             raise ValueError(f"No quote available for {product}")
         return self.market.quotes[product].get("price", None)
     
-    def _get_timestamp(self, product) -> int:
-        """Retrieve the current market timestamp for the product quote."""
+    def _get_timestep(self, product) -> int:
+        """Retrieve the current market timestep for the product quote."""
         if product not in self.market.quotes:
             raise ValueError(f"No quote available for {product}")
         return self.market.quotes[product].get("timestep", None)
@@ -105,7 +105,7 @@ class Portfolio_local():
 
     def buy(self, product: str, quantity: int) -> bool:
         """Attempt to buy `quantity` units of `product`."""
-        timestamp = self._get_timestamp(product)
+        timestep = self._get_timestep(product)
         price = self._get_price(product)
         cost = price * quantity
 
@@ -114,17 +114,17 @@ class Portfolio_local():
         new_positions[product] = new_positions.get(product, 0) + quantity
 
         if not self._check_leverage(new_cash, new_positions):
-            logger.warning(f"{timestamp} | Trade rejected: leverage limit exceeded.")
+            logger.warning(f"{timestep} | Trade rejected: leverage limit exceeded.")
             return False
 
         self.cash = new_cash
         self.positions = new_positions
-        logger.info(f"{timestamp} | BOUGHT {quantity} {product} @ {price} | new cash={self.cash:.2f}")
+        logger.info(f"{timestep} | BOUGHT {quantity} {product} @ {price} | new cash={self.cash:.2f}")
         return True
 
     def sell(self, product: str, quantity: int) -> bool:
         """Attempt to sell `quantity` units of `product` (shorts allowed)."""
-        timestamp = self._get_timestamp(product)
+        timestep = self._get_timestep(product)
         price = self._get_price(product)
         proceeds = price * quantity
 
@@ -133,12 +133,12 @@ class Portfolio_local():
         new_positions[product] = new_positions.get(product, 0) - quantity
 
         if not self._check_leverage(new_cash, new_positions):
-            logger.warning("Trade rejected: leverage limit exceeded.")
+            logger.warning(f"{timestep} | Trade rejected: leverage limit exceeded.")
             return False
 
         self.cash = new_cash
         self.positions = new_positions
-        logger.info(f"{timestamp} | SOLD {quantity} {product} @ {price} | new cash={self.cash:.2f}")
+        logger.info(f"{timestep} | SOLD {quantity} {product} @ {price} | new cash={self.cash:.2f}")
         return True
 
     def summary(self) -> dict:
@@ -192,7 +192,7 @@ class Engine_local():
         for quote_batch in self.data_batches:
             
             # 1. Update market with all quotes in the batch
-            # (The batch includes quotes for all products at one timestamp)
+            # (The batch includes quotes for all products at one timestep)
             for q in quote_batch:
                 self.market.update(q)
 
@@ -377,9 +377,14 @@ def evaluate_submission(py_path, table, participant_id, submission_id, competiti
     # The 'score' will be the Sharpe Ratio, used for the GSI
     score = sharpe
 
-    evaluation_id = f"{submission_id}"
+    test_name = test_key.split('/')[-1]
 
-    # --- FIX: Removed non-breaking spaces (U+00A0) ---
+    test_name = test_name.split('.')[0]
+
+    test_key = test_name
+
+    evaluation_id = f"{submission_id}_{test_name}"
+
     item = {
         'participant_id': participant_id,
         'submission_id': evaluation_id,
@@ -554,7 +559,7 @@ def lambda_handler(event, context):
                     'competition_id': competition_id,
                     'score': Decimal('-999'), # Indicate error
                     'error': str(e)[:500],
-                    'timestamp': int(time.time())
+                    'timestep': int(time.time())
                 })
             except Exception as ddb_e:
                 print(f"ERROR writing error record to DynamoDB for p={participant_id}, s={submission_id}: {ddb_e}")
