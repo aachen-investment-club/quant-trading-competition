@@ -33,4 +33,5 @@ EXPOSE 8888
 RUN printf '#!/bin/sh\nset -e\nexec python tools/submit.py "$@"\n' > /usr/local/bin/submit \
     && printf '#!/bin/sh\nset -e\n[ "$#" -gt 0 ] || set -- submission/submission.py\nexec python src/local_eval.py "$@"\n' > /usr/local/bin/local-eval \
     && printf '#!/bin/sh\nset -e\nexec python tools/sync_data.py "$@"\n' > /usr/local/bin/sync-data \
-    && chmod +x /usr/local/bin/submit /usr/local/bin/local-eval /usr/local/bin/sync-data
+    && printf '#!/bin/sh\nset -e\nexec python tools/check_status.py "$@"\n' > /usr/local/bin/check-status \
+    && chmod +x /usr/local/bin/submit /usr/local/bin/local-eval /usr/local/bin/sync-data /usr/local/bin/check-status
