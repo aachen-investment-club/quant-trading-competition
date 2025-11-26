@@ -29,3 +29,5 @@ override.tf.json
 .env
 /python
 *.zip
+
+logs/
